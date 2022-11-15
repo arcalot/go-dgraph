@@ -26,6 +26,13 @@ type directedGraph[NodeType any] struct {
 func (d *directedGraph[NodeType]) Mermaid() string {
     result := []string{}
     result = append(result, "flowchart TD")
+    result = append(result, "subgraph input")
+    for source := range d.connectionsFromNode {
+	if strings.HasPrefix(source, "input") {
+            result = append(result, source)
+	}
+    }
+    result = append(result, "end")
     for source, d := range d.connectionsFromNode {
         for destination := range d {
             result = append(result, fmt.Sprintf("%s-->%s", source, destination))
