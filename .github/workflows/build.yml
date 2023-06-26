@@ -10,25 +10,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v2
+        uses: golangci/golangci-lint-action@v3
         with:
           # Hard-coding version due to this bug: https://github.com/golangci/golangci-lint-action/issues/535
-          version: v1.47
+          version: v1.52.2
   test:
     name: go test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: 1.18
       - name: Set up gotestfmt
-        uses: GoTestTools/gotestfmt-action@v2
-      - uses: actions/cache@v2
+        uses: GoTestTools/gotestfmt-action@v3
+      - uses: actions/cache@v3
         with:
           path: |
             ~/go/pkg/mod
@@ -50,7 +50,7 @@ jobs:
           go tool cover -func /tmp/coverage.out
           echo "::endgroup::"
       - name: Upload test log
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: always()
         with:
           name: test-results
@@ -64,12 +64,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: 1.18
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: |
             ~/go/pkg/mod
