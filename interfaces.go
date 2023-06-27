@@ -31,12 +31,12 @@ type Node[NodeType any] interface {
     // exist, ErrNodeNotFound is returned. If the connection had created a cycle, ErrConnectionWouldCreateACycle
     // is returned.
     Connect(toNodeID string) error
-    // DisconnectInbound removes a connection to the specified node. If the connection does not exist, an
+    // DisconnectInbound removes an incoming connection from the specified node. If the connection does not exist, an
     // ErrConnectionDoesNotExist is returned.
-    DisconnectInbound(toNodeID string) error
-    // DisconnectOutbound removes a connection to the specified node. If the connection does not exist, an
+    DisconnectInbound(fromNodeID string) error
+    // DisconnectOutbound removes an outgoing connection to the specified node. If the connection does not exist, an
     // ErrConnectionDoesNotExist is returned.
-    DisconnectOutbound(fromNodeID string) error
+    DisconnectOutbound(toNodeID string) error
     // Remove removes the current node and all connections from the DirectedGraph.
     Remove() error
     // ListInboundConnections lists all inbound connections to this node.
