@@ -1,5 +1,5 @@
 module go.arcalot.io/dgraph
 
-go 1.18
+go 1.21
 
-require go.arcalot.io/assert v1.3.0
+require go.arcalot.io/assert v1.7.0
