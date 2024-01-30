@@ -17,7 +17,7 @@ func TestDirectedGraph_BasicNodeAdditionAndRemoval(t *testing.T) {
     n2, err := d.GetNodeByID("node-1")
     assert.NoError(t, err)
     assert.Equals(t, n, n2)
-    
+
     assert.ErrorR(t)(d.GetNodeByID("node-2"))
 
     nodes := d.ListNodesWithoutInboundConnections()
