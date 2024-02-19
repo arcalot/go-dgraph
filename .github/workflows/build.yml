@@ -10,9 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # v4
+        uses: golangci/golangci-lint-action@v4
         with:
           version: v1.55.2
   test:
@@ -20,14 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5
+        uses: actions/setup-go@v5
         with:
           go-version: 1.21.6
       - name: Set up gotestfmt
         uses: GoTestTools/gotestfmt-action@v2
-      - uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/go/pkg/mod
@@ -49,7 +49,7 @@ jobs:
           go tool cover -func /tmp/coverage.out
           echo "::endgroup::"
       - name: Upload test log
-        uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-results
@@ -63,12 +63,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5
+        uses: actions/setup-go@v5
         with:
           go-version: 1.21.6
-      - uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/go/pkg/mod
