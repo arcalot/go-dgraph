@@ -24,6 +24,8 @@ type directedGraph[NodeType any] struct {
     connectionsToNode   map[string]map[string]struct{}
 }
 
+var errorPathRegex, _ = regexp.Compile("error|crashed|failed|deploy_failed")
+
 func (d *directedGraph[NodeType]) Mermaid() string {
     result := []string{
         "%% Mermaid markdown workflow",
@@ -32,15 +34,14 @@ func (d *directedGraph[NodeType]) Mermaid() string {
     }
 
     errorPath := []string{"%% Error path"}
-    errorPathRegex, _ := regexp.Compile("error|crashed|failed|deploy_failed")
 
     for source, d := range d.connectionsFromNode {
         for destination := range d {
             destinationNodes := strings.Split(destination, ".")
-            match := errorPathRegex.MatchString(
+            isErrorPath := errorPathRegex.MatchString(
                 destinationNodes[len(destinationNodes)-1],
             )
-            if (match) {
+            if (isErrorPath) {
                 errorPath = append(errorPath, fmt.Sprintf("%s-->%s", source, destination))
             } else {
                 result = append(result, fmt.Sprintf("%s-->%s", source, destination))
