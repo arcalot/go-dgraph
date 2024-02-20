@@ -32,13 +32,12 @@ func (d *directedGraph[NodeType]) Mermaid() string {
     }
 
     errorPath := []string{"%% Error path"}
-    errorPathRegex := "error|crashed|failed|deploy_failed"
+    errorPathRegex, _ := regexp.Compile("error|crashed|failed|deploy_failed")
 
     for source, d := range d.connectionsFromNode {
         for destination := range d {
             destinationNodes := strings.Split(destination, ".")
-            match, _ := regexp.MatchString(
-                errorPathRegex,
+            match := errorPathRegex.MatchString(
                 destinationNodes[len(destinationNodes)-1],
             )
             if (match) {
@@ -49,9 +48,7 @@ func (d *directedGraph[NodeType]) Mermaid() string {
         }
     }
 
-    for _, connection := range errorPath {
-        result = append(result, connection)
-    }
+    result = append(result, errorPath...)
 
     result = append(result, "%% Mermaid end")
     return strings.Join(result, "\n") + "\n"
