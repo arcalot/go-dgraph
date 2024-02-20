@@ -4,6 +4,7 @@ import (
     "fmt"
     "strings"
     "sync"
+    "regexp"
 )
 
 // New creates a new directed acyclic graph.
@@ -24,20 +25,35 @@ type directedGraph[NodeType any] struct {
 }
 
 func (d *directedGraph[NodeType]) Mermaid() string {
-    result := []string{}
-    result = append(result, "flowchart TD")
-    result = append(result, "subgraph input")
-    for source := range d.connectionsFromNode {
-	if strings.HasPrefix(source, "input") {
-            result = append(result, source)
-	}
+    result := []string{
+        "%% Mermaid markdown workflow",
+        "flowchart LR",
+        "%% Success path",
     }
-    result = append(result, "end")
+
+    errorPath := []string{"%% Error path"}
+    errorPathRegex := "error|crashed|failed|deploy_failed"
+
     for source, d := range d.connectionsFromNode {
         for destination := range d {
-            result = append(result, fmt.Sprintf("%s-->%s", source, destination))
+            destinationNodes := strings.Split(destination, ".")
+            match, _ := regexp.MatchString(
+                errorPathRegex,
+                destinationNodes[len(destinationNodes)-1],
+            )
+            if (match) {
+                errorPath = append(errorPath, fmt.Sprintf("%s-->%s", source, destination))
+            } else {
+                result = append(result, fmt.Sprintf("%s-->%s", source, destination))
+            }
         }
     }
+
+    for _, connection := range errorPath {
+        result = append(result, connection)
+    }
+
+    result = append(result, "%% Mermaid end")
     return strings.Join(result, "\n") + "\n"
 }
 
