@@ -12,6 +12,7 @@ func New[NodeType any]() DirectedGraph[NodeType] {
 	return &directedGraph[NodeType]{
 		&sync.Mutex{},
 		map[string]*node[NodeType]{},
+		map[string]*node[NodeType]{},
 		map[string]map[string]struct{}{},
 		map[string]map[string]struct{}{},
 	}
@@ -20,6 +21,7 @@ func New[NodeType any]() DirectedGraph[NodeType] {
 type directedGraph[NodeType any] struct {
 	lock                *sync.Mutex
 	nodes               map[string]*node[NodeType]
+	readyForProcessing  map[string]*node[NodeType]
 	connectionsFromNode map[string]map[string]struct{}
 	connectionsToNode   map[string]map[string]struct{}
 }
@@ -60,6 +62,7 @@ func (d *directedGraph[NodeType]) Clone() DirectedGraph[NodeType] {
 	newDG := &directedGraph[NodeType]{
 		&sync.Mutex{},
 		make(map[string]*node[NodeType], len(d.nodes)),
+		make(map[string]*node[NodeType]), // Don't copy ready nodes.
 		d.cloneMap(d.connectionsFromNode),
 		d.cloneMap(d.connectionsToNode),
 	}
@@ -219,11 +222,34 @@ func (d *directedGraph[NodeType]) connectNodes(fromID, toID string, dependencyTy
 	return nil
 }
 
+func (d *directedGraph[NodeType]) PushStartingNodes() error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	for nodeID, n := range d.nodes {
+		if len(n.outstandingDependencies) == 0 {
+			d.readyForProcessing[nodeID] = n
+		}
+	}
+	return nil
+}
+
+func (d *directedGraph[NodeType]) PopReadyNodes() []*node[NodeType] {
+	result := make([]*node[NodeType], len(d.readyForProcessing))
+	i := 0
+	for _, node := range d.readyForProcessing {
+		result[i] = node
+		i += 1
+	}
+	d.readyForProcessing = make(map[string]*node[NodeType])
+	return result
+}
+
 type node[NodeType any] struct {
 	deleted                 bool
 	id                      string
 	item                    NodeType
-	finalized               bool
+	ready                   bool
 	status                  ResolutionStatus
 	outstandingDependencies map[string]DependencyType
 	dg                      *directedGraph[NodeType]
@@ -242,38 +268,19 @@ func (n *node[NodeType]) ResolveNode(status ResolutionStatus) error {
 		return ErrNodeResolutionAlreadySet{n.id, n.status, status}
 	}
 	n.status = status
-
+	// Propagate to outbound connections.
+	outboundConnections := n.dg.connectionsFromNode[n.ID()]
+	for outboundConnectionID := range outboundConnections {
+		err := n.dg.nodes[outboundConnectionID].DependencyResolved(n.ID(), status)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (n *node[NodeType]) Connect(nodeID string) error {
 	return n.dg.connectNodes(n.id, nodeID, AndDependency)
-	/*n.dg.lock.Lock()
-	defer n.dg.lock.Unlock()
-	if n.deleted {
-		return &ErrNodeDeleted{
-			n.id,
-		}
-	}
-	if nodeID == n.id {
-		return &ErrCannotConnectToSelf{
-			nodeID,
-		}
-	}
-	if _, ok := n.dg.nodes[nodeID]; !ok {
-		return &ErrNodeNotFound{
-			nodeID,
-		}
-	}
-	if _, ok := n.dg.connectionsFromNode[n.id][nodeID]; ok {
-		return &ErrConnectionAlreadyExists{
-			n.id,
-			nodeID,
-		}
-	}
-	n.dg.connectionsFromNode[n.id][nodeID] = struct{}{}
-	n.dg.connectionsToNode[nodeID][n.id] = struct{}{}
-	return nil*/
 }
 
 func (n *node[NodeType]) ConnectDependency(fromNodeID string, dependencyType DependencyType) error {
@@ -405,29 +412,66 @@ func (n *node[NodeType]) DependencyResolved(dependencyNodeID string, dependencyR
 		}
 	}
 	delete(n.outstandingDependencies, dependencyNodeID)
-	if dependencyResolution == Unresolvable && dependencyType == AndDependency {
-		// Missing requirement. Fail.
-		// TODO
+	if dependencyType == PostResolutionDependency {
+		return nil // Nothing to do.
 	}
-	// Now determine if it's ready to be finalized (no more deferred dependencies).
-	/*hasAndDependency := false
-	for _, dependencyType := range n.outstandingDependencies {
-		if dependencyType == AndDependency {
-			hasAndDependency = true
-			break
-		}
-	}*/
 	// If resolution is unresolvable, fail if current type is AND, or if there are no remaining OR dependencies.
-	// Wait if there are remaining AND dependencies, completion dependencies, or if
-	// no OR dependencies are resolved.
-	// Success if there are no outstanding `AND` dependencies or `completion` dependencies, and
-	// the current type is OR and success.
-	// Otherwise, do nothing at this stage.
+	// Treat as resolved if is just a completion dependency.
+	if dependencyResolution == Unresolvable && dependencyType != CompletionDependency {
+		selfIsUnresolvable := dependencyType == AndDependency
+		if !selfIsUnresolvable && dependencyType == OrDependency {
+			// Not unresolvable due to AND. Check the OR status. Only fail if this is the last OR.
+			hasOrDependency := false
+			for _, otherDependencyType := range n.outstandingDependencies {
+				if otherDependencyType == OrDependency {
+					hasOrDependency = true
+					break
+				}
+			}
+			selfIsUnresolvable = !hasOrDependency
+		}
+		if selfIsUnresolvable {
+			// Missing requirement. Mark ask unresolvable, which propagates to outbound connections.
+			return n.ResolveNode(Unresolvable)
+		}
+	} else {
+		hasAndDependency := n.hasOutstandingDependency(AndDependency) || n.hasOutstandingDependency(CompletionDependency)
+		hasOrDependency := n.hasOutstandingDependency(OrDependency)
+		// Now determine if it's ready to be finalized (no more deferred dependencies).
+		if dependencyType == OrDependency {
+			// No matter what, mark ORs resolved. If there are no AND dependencies left, mark as ready.
+			n.markOrsResolved()
+			if !hasAndDependency {
+				n.markAsReady()
+			}
+		} else if !hasOrDependency && !hasAndDependency {
+			n.markAsReady()
+		}
+	}
+	return nil
 }
 
-func (n *node[NodeType]) hasOutstandingAndDependency() bool {
+// Internal function. Caller should have appropriate mutex locked.
+func (n *node[NodeType]) markOrsResolved() {
+	// TODO: The alternative to this is to move these to a new list of resolved dependencies, but allow
+	// duplicate resolutions.
+	for dependency, dependencyType := range n.outstandingDependencies {
+		if dependencyType == OrDependency {
+			n.outstandingDependencies[dependency] = PostResolutionDependency
+		}
+	}
+}
+
+// Internal function. Caller should have appropriate mutex locked.
+func (n *node[NodeType]) markAsReady() {
+	n.ready = true
+	// Mark as ready for processing.
+	n.dg.readyForProcessing[n.id] = n
+}
+
+func (n *node[NodeType]) hasOutstandingDependency(expectedDependencyType DependencyType) bool {
 	for _, dependencyType := range n.outstandingDependencies {
-		if dependencyType == AndDependency {
+		if dependencyType == expectedDependencyType {
 			return true
 		}
 	}

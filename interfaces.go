@@ -4,14 +4,18 @@ type DependencyType string
 
 const (
 	// OrDependency means the dependencies are resolved when all `AND`s and a single `OR` dependency is resolved.
+	// In other words, one OR short-circuits all ORs, but not ANDs.
 	OrDependency DependencyType = "or"
 	// AndDependency means the dependency is required no matter what.
 	AndDependency DependencyType = "and"
 	// CompletionDependency means the dependency will resolve due to either resolution or failure.
 	CompletionDependency DependencyType = "completion"
+	// PostResolutionDependency is for dependencies that no longer have an effect due to a prior resolution.
+	// For example, if one OR is resolved, all other OR dependencies are changed to PostResolutionDependency.
+	PostResolutionDependency DependencyType = "soft-post-resolution"
 	// SoftDependency means the dependency does not wait for this dependency to resolve.
 	// The dependency may be unresolved at the time of resolution.
-	SoftDependency DependencyType = "soft"
+	//SoftDependency DependencyType = "soft"
 )
 
 // ResolutionStatus indicates the status of the node for situations
@@ -42,8 +46,12 @@ type DirectedGraph[NodeType any] interface {
 	Clone() DirectedGraph[NodeType]
 	// HasCycles performs cycle detection and returns true if the DirectedGraph has cycles.
 	HasCycles() bool
-	// ListFinalizedNodes lists all nodes that have finalized their status, whether resolved or unresolvable.
-	//ListFinalizedNodes()
+	// PopReadyNodes lists all nodes that have finalized their status, whether resolved
+	// or unresolvable, and clears the list.
+	PopReadyNodes() []*node[NodeType]
+	// PushStartingNodes pushes the initial nodes without dependencies for access with PopReadyNodes()
+	// O(N), so use only at the start.
+	PushStartingNodes() error
 
 	// Mermaid outputs the graph as a Mermaid string.
 	Mermaid() string
