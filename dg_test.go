@@ -137,7 +137,7 @@ func TestDirectedGraph_HasCycles(t *testing.T) {
 	assert.Equals(t, d.HasCycles(), true)
 }
 
-func TestDirectedGraph_OneAndDependency1(t *testing.T) {
+func TestDirectedGraph_OneAndDependencyConnect(t *testing.T) {
 	d := dgraph.New[string]()
 	n1, err := d.AddNode("node-1", "test1")
 	assert.NoError(t, err)
@@ -158,7 +158,7 @@ func TestDirectedGraph_OneAndDependency1(t *testing.T) {
 	assert.Equals(t, readyNodes[0].ID(), n2.ID())
 }
 
-func TestDirectedGraph_OneAndDependency2(t *testing.T) {
+func TestDirectedGraph_OneAndDependencyConnectDependency(t *testing.T) {
 	d := dgraph.New[string]()
 	n1, err := d.AddNode("node-1", "test1")
 	assert.NoError(t, err)
@@ -232,7 +232,7 @@ func TestDirectedGraph_OneOrDependency(t *testing.T) {
 }
 
 // Test two OR dependencies.
-func TestDirectedGraph_TwoOrDependencies1(t *testing.T) {
+func TestDirectedGraph_TwoOrDependenciesResolveFirst(t *testing.T) {
 	d := dgraph.New[string]()
 	n1, err := d.AddNode("node-1", "test1")
 	assert.NoError(t, err)
@@ -241,7 +241,6 @@ func TestDirectedGraph_TwoOrDependencies1(t *testing.T) {
 	n3, err := d.AddNode("node-3", "test3")
 	assert.NoError(t, err)
 
-	// Use the dependency connection method instead.
 	assert.NoError(t, n1.ConnectDependency(n2.ID(), dgraph.OrDependency))
 	assert.NoError(t, n1.ConnectDependency(n3.ID(), dgraph.OrDependency))
 
@@ -257,7 +256,7 @@ func TestDirectedGraph_TwoOrDependencies1(t *testing.T) {
 	assert.Equals(t, readyNodes[0].ID(), n1.ID())
 }
 
-func TestDirectedGraph_TwoOrDependencies2(t *testing.T) {
+func TestDirectedGraph_TwoOrDependenciesResolveSecond(t *testing.T) {
 	d := dgraph.New[string]()
 	n1, err := d.AddNode("node-1", "test1")
 	assert.NoError(t, err)
@@ -266,7 +265,6 @@ func TestDirectedGraph_TwoOrDependencies2(t *testing.T) {
 	n3, err := d.AddNode("node-3", "test3")
 	assert.NoError(t, err)
 
-	// Use the dependency connection method instead.
 	assert.NoError(t, n1.ConnectDependency(n2.ID(), dgraph.OrDependency))
 	assert.NoError(t, n1.ConnectDependency(n3.ID(), dgraph.OrDependency))
 
@@ -275,15 +273,15 @@ func TestDirectedGraph_TwoOrDependencies2(t *testing.T) {
 	assert.Equals(t, len(readyNodes), 2)
 	assert.SliceContains(t, n2, readyNodes)
 	assert.SliceContains(t, n3, readyNodes)
-	// Resolve one node: n2
-	assert.NoError(t, n2.ResolveNode(dgraph.Resolved))
+	// Resolve one node: n3
+	assert.NoError(t, n3.ResolveNode(dgraph.Resolved))
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.Equals(t, readyNodes[0].ID(), n1.ID())
 }
 
-// Test two ANDs and two OR dependencies, with the OR resolving before the AND.
-func TestDirectedGraph_TwoOrAndAndDependencies1(t *testing.T) {
+// Test two ANDs and two OR dependencies, with one OR resolving before the ANDs.
+func TestDirectedGraph_TwoOrAndTwoAndDependencies(t *testing.T) {
 	d := dgraph.New[string]()
 	n1, err := d.AddNode("node-1", "test1")
 	assert.NoError(t, err)
@@ -296,7 +294,7 @@ func TestDirectedGraph_TwoOrAndAndDependencies1(t *testing.T) {
 	n5, err := d.AddNode("node-5", "test5")
 	assert.NoError(t, err)
 
-	// Use the dependency connection method instead.
+	// (N2 || N3) && (N4 && N5)
 	assert.NoError(t, n1.ConnectDependency(n2.ID(), dgraph.OrDependency))
 	assert.NoError(t, n1.ConnectDependency(n3.ID(), dgraph.OrDependency))
 	assert.NoError(t, n1.ConnectDependency(n4.ID(), dgraph.AndDependency))
@@ -309,12 +307,13 @@ func TestDirectedGraph_TwoOrAndAndDependencies1(t *testing.T) {
 	assert.SliceContains(t, n3, readyNodes)
 	assert.SliceContains(t, n4, readyNodes)
 	assert.SliceContains(t, n5, readyNodes)
+	// Resolve one AND. There is another AND, so this should not resolve anything.
+	assert.NoError(t, n4.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, len(d.PopReadyNodes()), 0)
 	// Resolve one OR. That alone is not enough for n1 to be ready. No need to resolve n2, too.
 	assert.NoError(t, n2.ResolveNode(dgraph.Resolved))
 	assert.Equals(t, len(d.PopReadyNodes()), 0)
-	// Resolve both ANDs. It should resolve once both of them are resolved, but not just one.
-	assert.NoError(t, n4.ResolveNode(dgraph.Resolved))
-	assert.Equals(t, len(d.PopReadyNodes()), 0)
+	// Resolve the final AND. This should result in the node being ready now.
 	assert.NoError(t, n5.ResolveNode(dgraph.Resolved))
 
 	readyNodes = d.PopReadyNodes()
@@ -322,8 +321,8 @@ func TestDirectedGraph_TwoOrAndAndDependencies1(t *testing.T) {
 	assert.Equals(t, readyNodes[0].ID(), n1.ID())
 }
 
-// Test two ANDs and two OR dependencies, with the AND resolving before the OR.
-func TestDirectedGraph_TwoOrAndAndDependencies2(t *testing.T) {
+// Test one AND and two OR dependencies, with both ORs resolving before the AND.
+func TestDirectedGraph_BothOrAndOneAndDependencies(t *testing.T) {
 	d := dgraph.New[string]()
 	n1, err := d.AddNode("node-1", "test1")
 	assert.NoError(t, err)
@@ -333,27 +332,57 @@ func TestDirectedGraph_TwoOrAndAndDependencies2(t *testing.T) {
 	assert.NoError(t, err)
 	n4, err := d.AddNode("node-4", "test4")
 	assert.NoError(t, err)
-	n5, err := d.AddNode("node-5", "test5")
-	assert.NoError(t, err)
 
-	// Use the dependency connection method instead.
+	// (N2 || N3) && N4
 	assert.NoError(t, n1.ConnectDependency(n2.ID(), dgraph.OrDependency))
 	assert.NoError(t, n1.ConnectDependency(n3.ID(), dgraph.OrDependency))
 	assert.NoError(t, n1.ConnectDependency(n4.ID(), dgraph.AndDependency))
-	assert.NoError(t, n1.ConnectDependency(n5.ID(), dgraph.AndDependency))
 
 	assert.NoError(t, d.PushStartingNodes())
 	readyNodes := d.PopReadyNodes()
-	assert.Equals(t, len(readyNodes), 4)
+	assert.Equals(t, len(readyNodes), 3)
 	assert.SliceContains(t, n2, readyNodes)
 	assert.SliceContains(t, n3, readyNodes)
 	assert.SliceContains(t, n4, readyNodes)
-	assert.SliceContains(t, n5, readyNodes)
-
-	// Resolve both ANDs. It still needs the OR to resolve.
-	assert.NoError(t, n4.ResolveNode(dgraph.Resolved))
+	// Resolve one OR. Nothing should resolve because there is an unresolved AND.
+	assert.NoError(t, n2.ResolveNode(dgraph.Resolved))
 	assert.Equals(t, len(d.PopReadyNodes()), 0)
-	assert.NoError(t, n5.ResolveNode(dgraph.Resolved))
+	// Resolve the second OR. This should have no effect; still waiting on the AND.
+	assert.NoError(t, n3.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, len(d.PopReadyNodes()), 0)
+	// Resolve the AND. This should resolve to make n1 ready.
+	assert.NoError(t, n4.ResolveNode(dgraph.Resolved))
+	readyNodes = d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 1)
+	assert.Equals(t, readyNodes[0].ID(), n1.ID())
+}
+
+// Test an AND and two OR dependencies, with the AND resolving before one OR.
+func TestDirectedGraph_OneAndAndTwoOrDependencies(t *testing.T) {
+	d := dgraph.New[string]()
+	n1, err := d.AddNode("node-1", "test1")
+	assert.NoError(t, err)
+	n2, err := d.AddNode("node-2", "test2")
+	assert.NoError(t, err)
+	n3, err := d.AddNode("node-3", "test3")
+	assert.NoError(t, err)
+	n4, err := d.AddNode("node-4", "test4")
+	assert.NoError(t, err)
+
+	// (N2 || N3) && N4
+	assert.NoError(t, n1.ConnectDependency(n2.ID(), dgraph.OrDependency))
+	assert.NoError(t, n1.ConnectDependency(n3.ID(), dgraph.OrDependency))
+	assert.NoError(t, n1.ConnectDependency(n4.ID(), dgraph.AndDependency))
+
+	assert.NoError(t, d.PushStartingNodes())
+	readyNodes := d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 3)
+	assert.SliceContains(t, n2, readyNodes)
+	assert.SliceContains(t, n3, readyNodes)
+	assert.SliceContains(t, n4, readyNodes)
+
+	// Resolve AND. It still needs the OR to resolve.
+	assert.NoError(t, n4.ResolveNode(dgraph.Resolved))
 	assert.Equals(t, len(d.PopReadyNodes()), 0)
 
 	// Resolve one OR. That should now be enough to resolve it.

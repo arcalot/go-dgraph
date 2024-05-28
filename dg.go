@@ -19,11 +19,13 @@ func New[NodeType any]() DirectedGraph[NodeType] {
 }
 
 type directedGraph[NodeType any] struct {
-	lock                *sync.Mutex
-	nodes               map[string]*node[NodeType]
-	readyForProcessing  map[string]*node[NodeType]
+	lock               *sync.Mutex
+	nodes              map[string]*node[NodeType]
+	readyForProcessing map[string]*node[NodeType]
+	// Map of the source nodes to a set of the destination nodes.
 	connectionsFromNode map[string]map[string]struct{}
-	connectionsToNode   map[string]map[string]struct{}
+	// Map of the destination nodes to a set of the source nodes.
+	connectionsToNode map[string]map[string]struct{}
 }
 
 var errorPathRegex, _ = regexp.Compile(`\.(?:error|crashed|failed|deploy_failed)$`)
@@ -184,13 +186,9 @@ func (d *directedGraph[NodeType]) connectNodes(fromID, toID string, dependencyTy
 	// Make sure both nodes exist and are not deleted.
 	fromNode, ok := d.nodes[fromID]
 	if !ok {
-		return &ErrNodeNotFound{
-			fromID,
-		}
+		return &ErrNodeNotFound{fromID}
 	} else if fromNode.deleted {
-		return &ErrNodeDeleted{
-			fromID,
-		}
+		return &ErrNodeDeleted{fromID}
 	}
 	toNode, ok := d.nodes[toID]
 	if !ok {
@@ -198,9 +196,7 @@ func (d *directedGraph[NodeType]) connectNodes(fromID, toID string, dependencyTy
 			toID,
 		}
 	} else if toNode.deleted {
-		return &ErrNodeDeleted{
-			toID,
-		}
+		return &ErrNodeDeleted{toID}
 	}
 	// Validate that it's a valid, non-duplicate, connection.
 	if fromID == toID {
@@ -235,13 +231,18 @@ func (d *directedGraph[NodeType]) PushStartingNodes() error {
 }
 
 func (d *directedGraph[NodeType]) PopReadyNodes() []*node[NodeType] {
-	result := make([]*node[NodeType], len(d.readyForProcessing))
+	d.lock.Lock()
+	// Save the map to a local variable to minimize time locked.
+	readyMap := d.readyForProcessing
+	d.readyForProcessing = make(map[string]*node[NodeType])
+	d.lock.Unlock()
+	// Move the map nodes to a slice.
+	result := make([]*node[NodeType], len(readyMap))
 	i := 0
-	for _, node := range d.readyForProcessing {
+	for _, node := range readyMap {
 		result[i] = node
 		i += 1
 	}
-	d.readyForProcessing = make(map[string]*node[NodeType])
 	return result
 }
 
@@ -264,6 +265,8 @@ func (n *node[NodeType]) Item() NodeType {
 }
 
 func (n *node[NodeType]) ResolveNode(status ResolutionStatus) error {
+	n.dg.lock.Lock()
+	defer n.dg.lock.Unlock()
 	if n.status != WaitingForDependencies {
 		return ErrNodeResolutionAlreadySet{n.id, n.status, status}
 	}
@@ -271,7 +274,7 @@ func (n *node[NodeType]) ResolveNode(status ResolutionStatus) error {
 	// Propagate to outbound connections.
 	outboundConnections := n.dg.connectionsFromNode[n.ID()]
 	for outboundConnectionID := range outboundConnections {
-		err := n.dg.nodes[outboundConnectionID].DependencyResolved(n.ID(), status)
+		err := n.dg.nodes[outboundConnectionID].dependencyResolved(n.ID(), status)
 		if err != nil {
 			return err
 		}
@@ -291,20 +294,13 @@ func (n *node[NodeType]) DisconnectInbound(fromNodeID string) error {
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	if n.deleted {
-		return &ErrNodeDeleted{
-			n.id,
-		}
+		return &ErrNodeDeleted{n.id}
 	}
 	if _, ok := n.dg.nodes[fromNodeID]; !ok {
-		return &ErrNodeNotFound{
-			fromNodeID,
-		}
+		return &ErrNodeNotFound{fromNodeID}
 	}
 	if _, ok := n.dg.connectionsToNode[n.id][fromNodeID]; !ok {
-		return &ErrConnectionDoesNotExist{
-			n.id,
-			fromNodeID,
-		}
+		return &ErrConnectionDoesNotExist{n.id, fromNodeID}
 	}
 	delete(n.dg.connectionsToNode[n.id], fromNodeID)
 	delete(n.dg.connectionsFromNode[fromNodeID], n.id)
@@ -315,20 +311,13 @@ func (n *node[NodeType]) DisconnectOutbound(toNodeID string) error {
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	if n.deleted {
-		return &ErrNodeDeleted{
-			n.id,
-		}
+		return &ErrNodeDeleted{n.id}
 	}
 	if _, ok := n.dg.nodes[toNodeID]; !ok {
-		return &ErrNodeNotFound{
-			toNodeID,
-		}
+		return &ErrNodeNotFound{toNodeID}
 	}
 	if _, ok := n.dg.connectionsFromNode[n.id][toNodeID]; !ok {
-		return &ErrConnectionDoesNotExist{
-			n.id,
-			toNodeID,
-		}
+		return &ErrConnectionDoesNotExist{n.id, toNodeID}
 	}
 	delete(n.dg.connectionsFromNode[n.id], toNodeID)
 	delete(n.dg.connectionsToNode[toNodeID], n.id)
@@ -339,9 +328,7 @@ func (n *node[NodeType]) Remove() error {
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	if n.deleted {
-		return &ErrNodeDeleted{
-			n.id,
-		}
+		return &ErrNodeDeleted{n.id}
 	}
 	for toNodeID := range n.dg.connectionsFromNode[n.id] {
 		delete(n.dg.connectionsToNode[toNodeID], n.id)
@@ -360,9 +347,7 @@ func (n *node[NodeType]) ListInboundConnections() (map[string]Node[NodeType], er
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	if n.deleted {
-		return nil, &ErrNodeDeleted{
-			n.id,
-		}
+		return nil, &ErrNodeDeleted{n.id}
 	}
 	result := make(map[string]Node[NodeType], len(n.dg.connectionsToNode[n.id]))
 	for fromNodeID := range n.dg.connectionsToNode[n.id] {
@@ -375,9 +360,7 @@ func (n *node[NodeType]) ListOutboundConnections() (map[string]Node[NodeType], e
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	if n.deleted {
-		return nil, &ErrNodeDeleted{
-			n.id,
-		}
+		return nil, &ErrNodeDeleted{n.id}
 	}
 	result := make(map[string]Node[NodeType], len(n.dg.connectionsFromNode[n.id]))
 	for toNodeID := range n.dg.connectionsFromNode[n.id] {
@@ -386,15 +369,12 @@ func (n *node[NodeType]) ListOutboundConnections() (map[string]Node[NodeType], e
 	return result, nil
 }
 
-func (n *node[NodeType]) DependencyResolved(dependencyNodeID string, dependencyResolution ResolutionStatus) error {
-	// TODO: Should we create a lock per node, and only sync the shared one when needed?
-	n.dg.lock.Lock()
-	defer n.dg.lock.Unlock()
-	// TODO: Should we fail, or just stop propagation if deleted?
+// dependencyResolved is used to notify a node that one of its dependencies have had their resolution
+// status set. Once all dependencies are resolved, the node is set as finalized (ready for processing).
+// Caller should have appropriate mutex locked before calling.
+func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyResolution ResolutionStatus) error {
 	if n.deleted {
-		return &ErrNodeDeleted{
-			n.id,
-		}
+		return &ErrNodeDeleted{n.id}
 	}
 	if dependencyResolution == WaitingForDependencies {
 		// Illegal state
@@ -408,67 +388,51 @@ func (n *node[NodeType]) DependencyResolved(dependencyNodeID string, dependencyR
 		if isConnected {
 			return ErrDuplicateDependencyResolution{n.id, dependencyNodeID}
 		} else {
-			return ErrConnectionDoesNotExist{dependencyNodeID, n.id}
+			panic(ErrConnectionDoesNotExist{dependencyNodeID, n.id})
 		}
 	}
 	delete(n.outstandingDependencies, dependencyNodeID)
-	if dependencyType == PostResolutionDependency {
+	if dependencyType == ObviatedDependency {
 		return nil // Nothing to do.
 	}
 	// If resolution is unresolvable, fail if current type is AND, or if there are no remaining OR dependencies.
 	// Treat as resolved if is just a completion dependency.
 	if dependencyResolution == Unresolvable && dependencyType != CompletionDependency {
-		selfIsUnresolvable := dependencyType == AndDependency
-		if !selfIsUnresolvable && dependencyType == OrDependency {
-			// Not unresolvable due to AND. Check the OR status. Only fail if this is the last OR.
-			hasOrDependency := false
-			for _, otherDependencyType := range n.outstandingDependencies {
-				if otherDependencyType == OrDependency {
-					hasOrDependency = true
-					break
-				}
-			}
-			selfIsUnresolvable = !hasOrDependency
-		}
-		if selfIsUnresolvable {
-			// Missing requirement. Mark ask unresolvable, which propagates to outbound connections.
+		// Check for the failure case.
+		if dependencyType == AndDependency || !n.hasOutstandingDependency(OrDependency) {
+			// Missing requirement. Mark as unresolvable, which propagates to outbound connections.
 			return n.ResolveNode(Unresolvable)
 		}
 	} else {
-		hasAndDependency := n.hasOutstandingDependency(AndDependency) || n.hasOutstandingDependency(CompletionDependency)
-		hasOrDependency := n.hasOutstandingDependency(OrDependency)
-		// Now determine if it's ready to be finalized (no more deferred dependencies).
+		var hasOrDependency bool
 		if dependencyType == OrDependency {
-			// No matter what, mark ORs resolved. If there are no AND dependencies left, mark as ready.
-			n.markOrsResolved()
-			if !hasAndDependency {
-				n.markAsReady()
-			}
-		} else if !hasOrDependency && !hasAndDependency {
-			n.markAsReady()
+			// No matter what, mark other ORs as obviated. If there are no AND dependencies left, mark as ready.
+			n.markOrsObviated()
+			hasOrDependency = false // This resolved all outstanding ORs.
+		} else {
+			hasOrDependency = n.hasOutstandingDependency(OrDependency)
+		}
+		hasAndDependency := n.hasOutstandingDependency(AndDependency) || n.hasOutstandingDependency(CompletionDependency)
+		// Now determine if it's ready to be finalized (no more deferred dependencies).
+		if !(hasAndDependency || hasOrDependency) {
+			// Mark as ready for processing internally and in the DAG.
+			n.ready = true
+			n.dg.readyForProcessing[n.id] = n
 		}
 	}
 	return nil
 }
 
-// Internal function. Caller should have appropriate mutex locked.
-func (n *node[NodeType]) markOrsResolved() {
-	// TODO: The alternative to this is to move these to a new list of resolved dependencies, but allow
-	// duplicate resolutions.
+// Caller should have appropriate mutex locked before calling.
+func (n *node[NodeType]) markOrsObviated() {
 	for dependency, dependencyType := range n.outstandingDependencies {
 		if dependencyType == OrDependency {
-			n.outstandingDependencies[dependency] = PostResolutionDependency
+			n.outstandingDependencies[dependency] = ObviatedDependency
 		}
 	}
 }
 
-// Internal function. Caller should have appropriate mutex locked.
-func (n *node[NodeType]) markAsReady() {
-	n.ready = true
-	// Mark as ready for processing.
-	n.dg.readyForProcessing[n.id] = n
-}
-
+// Caller should have appropriate mutex locked before calling.
 func (n *node[NodeType]) hasOutstandingDependency(expectedDependencyType DependencyType) bool {
 	for _, dependencyType := range n.outstandingDependencies {
 		if dependencyType == expectedDependencyType {

@@ -10,9 +10,9 @@ const (
 	AndDependency DependencyType = "and"
 	// CompletionDependency means the dependency will resolve due to either resolution or failure.
 	CompletionDependency DependencyType = "completion"
-	// PostResolutionDependency is for dependencies that no longer have an effect due to a prior resolution.
-	// For example, if one OR is resolved, all other OR dependencies are changed to PostResolutionDependency.
-	PostResolutionDependency DependencyType = "soft-post-resolution"
+	// ObviatedDependency is for dependencies that no longer have an effect due to a prior resolution.
+	// For example, if one OR is resolved, all other OR dependencies are changed to ObviatedDependency.
+	ObviatedDependency DependencyType = "obviated-dependency"
 	// SoftDependency means the dependency does not wait for this dependency to resolve.
 	// The dependency may be unresolved at the time of resolution.
 	//SoftDependency DependencyType = "soft"
@@ -88,7 +88,4 @@ type Node[NodeType any] interface {
 	// updates the nodes that follow it in the graph.
 	// The resolution must happen only one time, or else a ErrNodeResolutionAlreadySet is returned.
 	ResolveNode(status ResolutionStatus) error
-	// DependencyResolved is used to notify a node that one of its dependencies have had their resolution
-	// status set. Once all dependencies are resolved, the node is set as finalized (ready for processing).
-	DependencyResolved(dependencyNodeID string, dependencyResolution ResolutionStatus) error
 }
