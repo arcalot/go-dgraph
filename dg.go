@@ -133,7 +133,7 @@ func (d *directedGraph[NodeType]) AddNode(id string, item NodeType) (Node[NodeTy
 		id,
 		item,
 		false,
-		WaitingForDependencies,
+		Waiting,
 		make(map[string]DependencyType),
 		d,
 	}
@@ -264,13 +264,31 @@ func (n *node[NodeType]) Item() NodeType {
 	return n.item
 }
 
+func (n *node[NodeType]) ResolutionStatus() ResolutionStatus {
+	return n.status
+}
+
+func (n *node[NodeType]) IsReady() bool {
+	return n.ready
+}
+
 func (n *node[NodeType]) ResolveNode(status ResolutionStatus) error {
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
-	if n.status != WaitingForDependencies {
+	return n.resolveNode(status)
+}
+
+func (n *node[NodeType]) resolveNode(status ResolutionStatus) error {
+	if n.deleted {
+		return ErrNodeDeleted{n.id}
+	}
+	if n.status != Waiting {
 		return ErrNodeResolutionAlreadySet{n.id, n.status, status}
 	}
 	n.status = status
+	if status == Waiting {
+		return nil // Don't propagate a waiting status.
+	}
 	// Propagate to outbound connections.
 	outboundConnections := n.dg.connectionsFromNode[n.ID()]
 	for outboundConnectionID := range outboundConnections {
@@ -376,7 +394,7 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 	if n.deleted {
 		return &ErrNodeDeleted{n.id}
 	}
-	if dependencyResolution == WaitingForDependencies {
+	if dependencyResolution == Waiting {
 		// Illegal state
 		return ErrNotifiedOfWaiting{n.id, dependencyNodeID}
 	}
@@ -386,7 +404,8 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 		// because there was never a connection.
 		_, isConnected := n.dg.connectionsToNode[n.id][dependencyNodeID]
 		if isConnected {
-			return ErrDuplicateDependencyResolution{n.id, dependencyNodeID}
+			// As designed, this is an internal function. So we guard against this in resolveNode.
+			panic(ErrDuplicateDependencyResolution{n.id, dependencyNodeID})
 		} else {
 			panic(ErrConnectionDoesNotExist{dependencyNodeID, n.id})
 		}
@@ -401,7 +420,9 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 		// Check for the failure case.
 		if dependencyType == AndDependency || !n.hasOutstandingDependency(OrDependency) {
 			// Missing requirement. Mark as unresolvable, which propagates to outbound connections.
-			return n.ResolveNode(Unresolvable)
+			n.ready = true
+			n.dg.readyForProcessing[n.id] = n
+			return n.resolveNode(Unresolvable)
 		}
 	} else {
 		var hasOrDependency bool

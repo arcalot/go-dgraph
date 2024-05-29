@@ -25,9 +25,9 @@ const (
 type ResolutionStatus string
 
 const (
-	WaitingForDependencies ResolutionStatus = "waiting"
-	Resolved               ResolutionStatus = "resolved"
-	Unresolvable           ResolutionStatus = "unresolvable"
+	Waiting      ResolutionStatus = "waiting"
+	Resolved     ResolutionStatus = "resolved"
+	Unresolvable ResolutionStatus = "unresolvable"
 )
 
 // DirectedGraph is the representation of a Directed Graph width nodes and directed connections.
@@ -84,8 +84,13 @@ type Node[NodeType any] interface {
 	ListInboundConnections() (map[string]Node[NodeType], error)
 	// ListOutboundConnections lists all outbound connections from this node.
 	ListOutboundConnections() (map[string]Node[NodeType], error)
-	// ResolveNode sets the resolution status of the node, and
-	// updates the nodes that follow it in the graph.
+	// ResolveNode sets the resolution status of the node, and updates the nodes that follow it in the graph.
 	// The resolution must happen only one time, or else a ErrNodeResolutionAlreadySet is returned.
 	ResolveNode(status ResolutionStatus) error
+	// ResolutionStatus returns the resolution status. See the ResolutionStatus type.
+	// This is separate from the ready status (see IsReady).
+	// If a required dependency is marked unresolvable, the node's status will be set to Unresolvable.
+	ResolutionStatus() ResolutionStatus
+	// IsReady returns whether the node's dependencies have been resolved, making this node ready for processing.
+	IsReady() bool
 }
