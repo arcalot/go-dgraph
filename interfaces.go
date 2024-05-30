@@ -93,4 +93,6 @@ type Node[NodeType any] interface {
 	ResolutionStatus() ResolutionStatus
 	// IsReady returns whether the node's dependencies have been resolved, making this node ready for processing.
 	IsReady() bool
+	// OutstandingDependencies returns a map of the dependency node ID to the DependencyType of the dependency.
+	OutstandingDependencies() map[string]DependencyType
 }

@@ -2,6 +2,7 @@ package dgraph
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 	"sync"
@@ -71,10 +72,13 @@ func (d *directedGraph[NodeType]) Clone() DirectedGraph[NodeType] {
 
 	for nodeID, nodeData := range d.nodes {
 		newDG.nodes[nodeID] = &node[NodeType]{
-			deleted: nodeData.deleted,
-			id:      nodeID,
-			item:    nodeData.item,
-			dg:      newDG,
+			deleted:                 nodeData.deleted,
+			id:                      nodeID,
+			item:                    nodeData.item,
+			dg:                      newDG,
+			ready:                   nodeData.ready,
+			status:                  nodeData.status,
+			outstandingDependencies: maps.Clone(nodeData.outstandingDependencies),
 		}
 	}
 
@@ -198,7 +202,7 @@ func (d *directedGraph[NodeType]) connectNodes(fromID, toID string, dependencyTy
 	} else if toNode.deleted {
 		return &ErrNodeDeleted{toID}
 	}
-	// Validate that it's a valid, non-duplicate, connection.
+	// Check that it's a non-self and non-duplicate connection.
 	if fromID == toID {
 		return &ErrCannotConnectToSelf{
 			fromID,
@@ -272,6 +276,10 @@ func (n *node[NodeType]) IsReady() bool {
 	return n.ready
 }
 
+func (n *node[NodeType]) OutstandingDependencies() map[string]DependencyType {
+	return maps.Clone(n.outstandingDependencies)
+}
+
 func (n *node[NodeType]) ResolveNode(status ResolutionStatus) error {
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
@@ -281,6 +289,9 @@ func (n *node[NodeType]) ResolveNode(status ResolutionStatus) error {
 func (n *node[NodeType]) resolveNode(status ResolutionStatus) error {
 	if n.deleted {
 		return ErrNodeDeleted{n.id}
+	}
+	if n.status == "" {
+		return ErrNodeResolutionUnknown{n.id, n.status}
 	}
 	if n.status != Waiting {
 		return ErrNodeResolutionAlreadySet{n.id, n.status, status}

@@ -8,7 +8,7 @@ type ErrNodeDeleted struct {
 }
 
 func (e ErrNodeDeleted) Error() string {
-	return fmt.Sprintf("node with ID %s is deleted", e.NodeID)
+	return fmt.Sprintf("node with ID %q is deleted", e.NodeID)
 }
 
 // ErrCannotConnectToSelf indicates that an attempt was made to connect a node to itself.
@@ -17,7 +17,7 @@ type ErrCannotConnectToSelf struct {
 }
 
 func (e ErrCannotConnectToSelf) Error() string {
-	return fmt.Sprintf("cannot connect node %s to itself", e.NodeID)
+	return fmt.Sprintf("cannot connect node %q to itself", e.NodeID)
 }
 
 // ErrNodeNotFound is an error that is returned if the specified node is not found.
@@ -26,7 +26,7 @@ type ErrNodeNotFound struct {
 }
 
 func (e ErrNodeNotFound) Error() string {
-	return fmt.Sprintf("node with ID %s not found", e.NodeID)
+	return fmt.Sprintf("node with ID %q not found", e.NodeID)
 }
 
 // ErrNodeAlreadyExists signals that a node with the specified ID already exists.
@@ -35,7 +35,7 @@ type ErrNodeAlreadyExists struct {
 }
 
 func (e ErrNodeAlreadyExists) Error() string {
-	return fmt.Sprintf("node with ID %s already exists", e.NodeID)
+	return fmt.Sprintf("node with ID %q already exists", e.NodeID)
 }
 
 // ErrConnectionWouldCreateACycle is an error that is returned if the newly created connection would create a cycle.
@@ -46,7 +46,7 @@ type ErrConnectionWouldCreateACycle struct {
 
 func (e ErrConnectionWouldCreateACycle) Error() string {
 	return fmt.Sprintf(
-		"connection from node %s to node %s would create a cycle",
+		"connection from node %q to node %q would create a cycle",
 		e.SourceNodeID,
 		e.DestinationNodeID,
 	)
@@ -60,7 +60,7 @@ type ErrConnectionAlreadyExists struct {
 
 func (e ErrConnectionAlreadyExists) Error() string {
 	return fmt.Sprintf(
-		"connection from node %s to node %s already exists",
+		"connection from node %q to node %q already exists",
 		e.SourceNodeID,
 		e.DestinationNodeID,
 	)
@@ -74,7 +74,7 @@ type ErrConnectionDoesNotExist struct {
 
 func (e ErrConnectionDoesNotExist) Error() string {
 	return fmt.Sprintf(
-		"connection from node %s to node %s does not exist",
+		"connection from node %q to node %q does not exist",
 		e.SourceNodeID,
 		e.DestinationNodeID,
 	)
@@ -88,8 +88,19 @@ type ErrNodeResolutionAlreadySet struct {
 
 func (e ErrNodeResolutionAlreadySet) Error() string {
 	return fmt.Sprintf(
-		"attempted to re-resolve node %s with resolution %s; already set to %s",
+		"attempted to re-resolve node %q with resolution %q; already set to %q",
 		e.NodeID, e.NewStatus, e.ExistingStatus,
+	)
+}
+
+type ErrNodeResolutionUnknown struct {
+	NodeID         string
+	ExistingStatus ResolutionStatus
+}
+
+func (e ErrNodeResolutionUnknown) Error() string {
+	return fmt.Sprintf("while resolving node %q; the existing resolution field had an invalid value of %q",
+		e.NodeID, e.ExistingStatus,
 	)
 }
 
@@ -100,7 +111,7 @@ type ErrDuplicateDependencyResolution struct {
 
 func (e ErrDuplicateDependencyResolution) Error() string {
 	return fmt.Sprintf(
-		"attempted to re-resolve dependency %s of node %s; the connection remains; but there are"+
+		"attempted to re-resolve dependency %q of node %q; the connection remains; but there are"+
 			" no outstanding requirements",
 		e.NodeID, e.DependencyID,
 	)
@@ -113,7 +124,7 @@ type ErrNotifiedOfWaiting struct {
 
 func (e ErrNotifiedOfWaiting) Error() string {
 	return fmt.Sprintf(
-		"notified node %s of waiting resolution of dependency %s; expected a non-waiting state",
+		"notified node %q of waiting resolution of dependency %q; expected a non-waiting state",
 		e.NodeID, e.DependencyID,
 	)
 }
