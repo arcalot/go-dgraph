@@ -133,13 +133,13 @@ func (d *directedGraph[NodeType]) AddNode(id string, item NodeType) (Node[NodeTy
 		}
 	}
 	d.nodes[id] = &node[NodeType]{
-		false,
-		id,
-		item,
-		false,
-		Waiting,
-		make(map[string]DependencyType),
-		d,
+		deleted:                 false,
+		ready:                   false,
+		id:                      id,
+		item:                    item,
+		status:                  Waiting,
+		outstandingDependencies: make(map[string]DependencyType),
+		dg:                      d,
 	}
 	d.connectionsToNode[id] = map[string]struct{}{}
 	d.connectionsFromNode[id] = map[string]struct{}{}
@@ -184,6 +184,8 @@ func (d *directedGraph[NodeType]) ListNodesWithoutInboundConnections() map[strin
 	return result
 }
 
+// Validates the node IDs specified, and that it's a valid connection, then sets the `to` and `from` connections,
+// and adds the dependency to the node.
 func (d *directedGraph[NodeType]) connectNodes(fromID, toID string, dependencyType DependencyType) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -196,23 +198,16 @@ func (d *directedGraph[NodeType]) connectNodes(fromID, toID string, dependencyTy
 	}
 	toNode, ok := d.nodes[toID]
 	if !ok {
-		return &ErrNodeNotFound{
-			toID,
-		}
+		return &ErrNodeNotFound{toID}
 	} else if toNode.deleted {
 		return &ErrNodeDeleted{toID}
 	}
 	// Check that it's a non-self and non-duplicate connection.
 	if fromID == toID {
-		return &ErrCannotConnectToSelf{
-			fromID,
-		}
+		return &ErrCannotConnectToSelf{fromID}
 	}
 	if _, ok := d.connectionsFromNode[fromID][toID]; ok {
-		return &ErrConnectionAlreadyExists{
-			fromID,
-			toID,
-		}
+		return &ErrConnectionAlreadyExists{fromID, toID}
 	}
 	// Update the mappings.
 	d.connectionsFromNode[fromID][toID] = struct{}{}
@@ -236,11 +231,11 @@ func (d *directedGraph[NodeType]) PushStartingNodes() error {
 
 func (d *directedGraph[NodeType]) PopReadyNodes() []*node[NodeType] {
 	d.lock.Lock()
-	// Save the map to a local variable to minimize time locked.
+	// Transfer the map to a local variable to minimize time locked, and reset the graph's value.
 	readyMap := d.readyForProcessing
 	d.readyForProcessing = make(map[string]*node[NodeType])
 	d.lock.Unlock()
-	// Move the map nodes to a slice.
+	// Copy the map nodes to a slice to comply with the interface.
 	result := make([]*node[NodeType], len(readyMap))
 	i := 0
 	for _, node := range readyMap {
@@ -269,14 +264,20 @@ func (n *node[NodeType]) Item() NodeType {
 }
 
 func (n *node[NodeType]) ResolutionStatus() ResolutionStatus {
+	n.dg.lock.Lock()
+	defer n.dg.lock.Unlock()
 	return n.status
 }
 
 func (n *node[NodeType]) IsReady() bool {
+	n.dg.lock.Lock()
+	defer n.dg.lock.Unlock()
 	return n.ready
 }
 
 func (n *node[NodeType]) OutstandingDependencies() map[string]DependencyType {
+	n.dg.lock.Lock()
+	defer n.dg.lock.Unlock()
 	return maps.Clone(n.outstandingDependencies)
 }
 
@@ -438,7 +439,6 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 	} else {
 		var hasOrDependency bool
 		if dependencyType == OrDependency {
-			// No matter what, mark other ORs as obviated. If there are no AND dependencies left, mark as ready.
 			n.markOrsObviated()
 			hasOrDependency = false // This resolved all outstanding ORs.
 		} else {
