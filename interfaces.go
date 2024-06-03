@@ -6,22 +6,20 @@ const (
 	// OrDependency means the dependencies are resolved when all `AND`s and a single `OR` dependency is resolved.
 	// In other words, one OR short-circuits all ORs, but not ANDs.
 	OrDependency DependencyType = "or"
-	// AndDependency means the dependency is required no matter what.
+	// AndDependency means the dependency is required for resolution.
 	AndDependency DependencyType = "and"
 	// CompletionDependency means the dependency will resolve due to either resolution or failure.
 	CompletionDependency DependencyType = "completion"
 	// ObviatedDependency is for dependencies that no longer have an effect due to a prior resolution.
 	// For example, if one OR is resolved, all other OR dependencies are changed to ObviatedDependency.
 	ObviatedDependency DependencyType = "obviated-dependency"
-	// SoftDependency means the dependency does not wait for this dependency to resolve.
-	// The dependency may be unresolved at the time of resolution.
-	//SoftDependency DependencyType = "soft"
 )
 
-// ResolutionStatus indicates the status of the node for situations
-//
-// The way the resolution system works is first the DAG is created, with
-// all nodes created, and all of their dependencies set.
+// ResolutionStatus indicates the individual status of the node.
+// All nodes start out in Waiting ("waiting") status.
+// The user of the DAG indicates when a node is resolved with `Node#ResolveNode()`,
+// allowing dependencies to become marked as ready (which is separate from being resolved).
+// As a convention, a status is only set once the node is ready, but that is not enforced.
 type ResolutionStatus string
 
 const (
@@ -46,11 +44,12 @@ type DirectedGraph[NodeType any] interface {
 	Clone() DirectedGraph[NodeType]
 	// HasCycles performs cycle detection and returns true if the DirectedGraph has cycles.
 	HasCycles() bool
-	// PopReadyNodes lists all nodes that have finalized their status, whether resolved
-	// or unresolvable, and clears the list.
+	// PopReadyNodes returns of a list of all nodes that have finalized their status, whether
+	// resolved or unresolvable, and clears the list.
 	PopReadyNodes() []*node[NodeType]
-	// PushStartingNodes pushes the initial nodes without dependencies for access with PopReadyNodes()
-	// O(N), so use only at the start.
+	// PushStartingNodes searches for the initial ready nodes without dependencies and saves them.
+	// The nodes can then be retrieved with a call to `PopReadyNodes()`.
+	// Recommended to be called only once following construction of the DAG.
 	PushStartingNodes() error
 
 	// Mermaid outputs the graph as a Mermaid string.
@@ -63,14 +62,14 @@ type Node[NodeType any] interface {
 	ID() string
 	// Item returns the underlying item for the node.
 	Item() NodeType
-	// Connect creates a new connection from the current node to the specified node. If the specified node does not
-	// exist, ErrNodeNotFound is returned. If the connection had created a cycle, ErrConnectionWouldCreateACycle
-	// is returned. Sets the dependency type to an AND dependency.
+	// Connect creates a new connection from the current node to the specified node.
+	// If the specified node does not exist, ErrNodeNotFound is returned. If fromNodeID is equal to the node's ID,
+	// ErrCannotConnectToSelf is returned.
 	Connect(toNodeID string) error
 	// ConnectDependency creates a new connection from the specified node to the current node.
 	// The dependency type is set to determine when the node becomes finalized.
-	// If the specified node does not exist, ErrNodeNotFound is returned. If the connection had
-	// created a cycle, ErrConnectionWouldCreateACycle is returned.
+	// If the specified node does not exist, ErrNodeNotFound is returned. If fromNodeID is equal to the node's ID,
+	// ErrCannotConnectToSelf is returned.
 	ConnectDependency(fromNodeID string, dependencyType DependencyType) error
 	// DisconnectInbound removes an incoming connection from the specified node. If the connection does not exist, an
 	// ErrConnectionDoesNotExist is returned.
