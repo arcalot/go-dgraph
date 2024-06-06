@@ -236,7 +236,7 @@ func (d *directedGraph[NodeType]) PopReadyNodes() []*node[NodeType] {
 	readyMap := d.readyForProcessing
 	d.readyForProcessing = make(map[string]*node[NodeType])
 	d.lock.Unlock()
-	// Copy the map nodes to a slice to comply with the interface.
+
 	result := make([]*node[NodeType], len(readyMap))
 	i := 0
 	for _, node := range readyMap {
@@ -265,12 +265,14 @@ func (n *node[NodeType]) Item() NodeType {
 }
 
 func (n *node[NodeType]) ResolutionStatus() ResolutionStatus {
+	// The status can change, so lock to prevent data races.
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	return n.status
 }
 
 func (n *node[NodeType]) IsReady() bool {
+	// The ready state can change, so lock to prevent data races.
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	return n.ready
@@ -282,12 +284,16 @@ func (n *node[NodeType]) OutstandingDependencies() map[string]DependencyType {
 	return maps.Clone(n.outstandingDependencies)
 }
 
+// ResolveNode is the externally accessible way to resolve the node.
+// This function will take care of the locking, then call the internal
+// resolveNode function.
 func (n *node[NodeType]) ResolveNode(status ResolutionStatus) error {
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	return n.resolveNode(status)
 }
 
+// Caller should have appropriate mutex locked before calling.
 func (n *node[NodeType]) resolveNode(status ResolutionStatus) error {
 	if n.deleted {
 		return ErrNodeDeleted{n.id}
@@ -404,7 +410,7 @@ func (n *node[NodeType]) ListOutboundConnections() (map[string]Node[NodeType], e
 	return result, nil
 }
 
-// dependencyResolved is used to notify a node that one of its dependencies have had their resolution
+// dependencyResolved is used to notify a node that one of that node's dependencies have had their resolution
 // status set. Once all dependencies are resolved, the node is set as finalized (ready for processing).
 // Caller should have appropriate mutex locked before calling.
 func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyResolution ResolutionStatus) error {
@@ -431,10 +437,11 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 	if dependencyType == ObviatedDependency {
 		return nil // Nothing to do.
 	}
-	// If resolution is unresolvable, fail if current type is AND, or if there are no remaining OR dependencies.
-	// Treat as resolved if is just a completion dependency.
+	// If the dependency is unresolvable, mark self as unresolvable if current type is AND,
+	// or if there are no remaining OR dependencies.
+	// Treat as resolved if is just a completion-AND dependency.
 	if dependencyResolution == Unresolvable && dependencyType != CompletionAndDependency {
-		// Check for the failure case.
+		// Check for the unresolvable case.
 		if dependencyType == AndDependency || !n.hasOutstandingDependency(OrDependency) {
 			// Missing requirement. Mark as unresolvable, which propagates to outbound connections.
 			n.ready = true
