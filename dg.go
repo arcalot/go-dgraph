@@ -312,10 +312,14 @@ func (n *node[NodeType]) resolveNode(status ResolutionStatus) error {
 	return nil
 }
 
+// Connect connects forward from the called node to the node with the ID specified
+// in fromNodeID. It has an AndDependency type for legacy reasons.
 func (n *node[NodeType]) Connect(nodeID string) error {
 	return n.dg.connectNodes(n.id, nodeID, AndDependency)
 }
 
+// ConnectDependency connects backward and sets a dependency. The connection is made
+// from the node with the ID specified to the called node.
 func (n *node[NodeType]) ConnectDependency(fromNodeID string, dependencyType DependencyType) error {
 	return n.dg.connectNodes(fromNodeID, n.id, dependencyType)
 }
