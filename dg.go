@@ -184,8 +184,9 @@ func (d *directedGraph[NodeType]) ListNodesWithoutInboundConnections() map[strin
 	return result
 }
 
-// Validates the node IDs specified, and that it's a valid connection, then sets the `to` and `from` connections,
-// and adds the dependency to the node.
+// Validates the specified node IDs and confirms that a connection between them
+// would be valid, then sets the `to` and `from` connections and adds the
+// dependency to the `to` node.
 func (d *directedGraph[NodeType]) connectNodes(fromID, toID string, dependencyType DependencyType) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
