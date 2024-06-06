@@ -8,11 +8,11 @@ const (
 	OrDependency DependencyType = "or"
 	// AndDependency means the dependency is required for resolution.
 	AndDependency DependencyType = "and"
-	// CompletionDependency means the dependency will resolve due to either resolution or failure.
-	CompletionDependency DependencyType = "completion"
+	// CompletionAndDependency means the dependency will resolve due to either resolution or failure.
+	CompletionAndDependency DependencyType = "completion-and"
 	// ObviatedDependency is for dependencies that no longer have an effect due to a prior resolution.
 	// For example, if one OR is resolved, all other OR dependencies are changed to ObviatedDependency.
-	ObviatedDependency DependencyType = "obviated-dependency"
+	ObviatedDependency DependencyType = "obviated"
 )
 
 // ResolutionStatus indicates the individual status of the node.
@@ -85,12 +85,16 @@ type Node[NodeType any] interface {
 	ListOutboundConnections() (map[string]Node[NodeType], error)
 	// ResolveNode sets the resolution status of the node, and updates the nodes that follow it in the graph.
 	// The resolution must happen only one time, or else a ErrNodeResolutionAlreadySet is returned.
+	// This transitions the resolution status from the existing state (typically Waiting) to the given state.
 	ResolveNode(status ResolutionStatus) error
 	// ResolutionStatus returns the resolution status. See the ResolutionStatus type.
 	// This is separate from the ready status (see IsReady).
 	// If a required dependency is marked unresolvable, the node's status will be set to Unresolvable.
 	ResolutionStatus() ResolutionStatus
 	// IsReady returns whether the node's dependencies have been resolved, making this node ready for processing.
+	// Recommended for debugging and testing.
+	// If marked not ready, the value may change at any time. For a reliable method of getting the node when it
+	// is ready, call `PopReadyNodes()`. Once a node is marked ready, it is final and cannot be marked not ready.
 	IsReady() bool
 	// OutstandingDependencies returns a map of the dependency node ID to the DependencyType of the dependency.
 	OutstandingDependencies() map[string]DependencyType

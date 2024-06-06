@@ -428,7 +428,7 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 	}
 	// If resolution is unresolvable, fail if current type is AND, or if there are no remaining OR dependencies.
 	// Treat as resolved if is just a completion dependency.
-	if dependencyResolution == Unresolvable && dependencyType != CompletionDependency {
+	if dependencyResolution == Unresolvable && dependencyType != CompletionAndDependency {
 		// Check for the failure case.
 		if dependencyType == AndDependency || !n.hasOutstandingDependency(OrDependency) {
 			// Missing requirement. Mark as unresolvable, which propagates to outbound connections.
@@ -444,7 +444,7 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 		} else {
 			hasOrDependency = n.hasOutstandingDependency(OrDependency)
 		}
-		hasAndDependency := n.hasOutstandingDependency(AndDependency) || n.hasOutstandingDependency(CompletionDependency)
+		hasAndDependency := n.hasOutstandingDependency(AndDependency) || n.hasOutstandingDependency(CompletionAndDependency)
 		// Now determine if it's ready to be finalized (no more deferred dependencies).
 		if !(hasAndDependency || hasOrDependency) {
 			// Mark as ready for processing internally and in the DAG.
