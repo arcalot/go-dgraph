@@ -46,6 +46,8 @@ type DirectedGraph[NodeType any] interface {
 	HasCycles() bool
 	// PopReadyNodes returns of a list of all nodes that have finalized their status, whether
 	// resolved or unresolvable, and clears the list.
+	// A node becomes ready to process when all of its AND dependencies and at least one of
+	// its OR dependencies are resolved.
 	PopReadyNodes() []*node[NodeType]
 	// PushStartingNodes searches for the initial ready nodes without dependencies and saves them.
 	// The nodes can then be retrieved with a call to `PopReadyNodes()`.
@@ -93,6 +95,8 @@ type Node[NodeType any] interface {
 	ResolutionStatus() ResolutionStatus
 	// IsReady returns whether the node's dependencies have been resolved, making this node ready for processing.
 	// Recommended for debugging and testing.
+	// A node becomes ready to process when all of its AND dependencies and at least one of
+	// its OR dependencies are resolved.
 	// If marked not ready, the value may change at any time. For a reliable method of getting the node when it
 	// is ready, call `PopReadyNodes()`. Once a node is marked ready, it is final and cannot be marked not ready.
 	IsReady() bool
