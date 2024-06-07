@@ -265,14 +265,22 @@ func (n *node[NodeType]) Item() NodeType {
 }
 
 func (n *node[NodeType]) ResolutionStatus() ResolutionStatus {
-	// The status can change and be accessed on different threads, so lock to prevent races.
+	// Since the status can be changed by another thread, we access it under a
+	// lock here to prevent Go from reporting a data race; however, the actual
+	// status may change as soon as the lock is released, and so the return
+	// value, unless it is a terminal value, does not necessarily represent the
+	// current value.
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	return n.status
 }
 
 func (n *node[NodeType]) IsReady() bool {
-	// The status can change and be accessed on different threads, so lock to prevent races.
+	// Since the ready state can be changed by another thread, we access it under a
+	// lock here to prevent Go from reporting a data race; however, the actual
+	// ready state may change as soon as the lock is released, and so the return
+	// value, unless it is a terminal value, does not necessarily represent the
+	// current value.
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	return n.ready
