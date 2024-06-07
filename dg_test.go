@@ -152,7 +152,7 @@ func testSingleResolutionDependency(
 	dependentNode, err := d.AddNode("dependent-node", "Dependent Node")
 	assert.NoError(t, err)
 
-	dependency1Node, err := d.AddNode("node-2", "test2")
+	dependency1Node, err := d.AddNode("dependency-1", "Dependency 1")
 	assert.NoError(t, err)
 
 	closure(dependentNode, dependency1Node)
@@ -326,17 +326,18 @@ func TestDirectedGraph_TwoOrAndTwoAndDependencies(t *testing.T) {
 	assert.SliceContains(t, dependencyNodeOr2, readyNodes)
 	assert.SliceContains(t, dependencyNodeAnd1, readyNodes)
 	assert.SliceContains(t, dependencyNodeAnd2, readyNodes)
-	// Resolve one AND. There is another AND, so this should not resolve the dependent node.
+	// Resolve one AND. There is another AND, so this should not make the dependent node ready.
 	assert.NoError(t, dependencyNodeAnd1.ResolveNode(dgraph.Resolved))
 	assert.Equals(t, len(d.PopReadyNodes()), 0)
 	// Resolve one OR, dependencyNodeOr1. That alone is not enough for dependentNode to be ready because of
-	// remaining AND dependencies. However, one OR is enough, so no need to resolve dependencyNodeOr2
+	// the remaining AND dependency.
 	assert.NoError(t, dependencyNodeOr1.ResolveNode(dgraph.Resolved))
 	assert.Equals(t, len(d.PopReadyNodes()), 0)
 	// Resolve the final AND. This should result in the node being ready now.
 	assert.NoError(t, dependencyNodeAnd2.ResolveNode(dgraph.Resolved))
-
 	readyNodes = d.PopReadyNodes()
+	// To get to this point, we resolved one OR and both ANDs. One OR is enough, so there was no need
+	// to resolve dependencyNodeOr2, too.
 	assert.Equals(t, len(readyNodes), 1)
 	assert.Equals(t, readyNodes[0].ID(), dependentNode.ID())
 }
@@ -413,7 +414,7 @@ func TestDirectedGraph_OneAndAndTwoOrDependencies(t *testing.T) {
 	assert.Equals(t, readyNodes[0].ID(), dependentNode.ID())
 }
 
-// Test unresolvable with a simple AND
+// Test `Unresolvable` with a simple AND
 func TestDirectedGraph_OneUnresolvableAndDependency(t *testing.T) {
 	testSingleResolutionDependency(t, dgraph.Unresolvable, dgraph.Unresolvable,
 		func(dependentNode dgraph.Node[string], dependencyNode1 dgraph.Node[string]) {
@@ -422,7 +423,7 @@ func TestDirectedGraph_OneUnresolvableAndDependency(t *testing.T) {
 	)
 }
 
-// Test unresolvable with a simple OR.
+// Test `Unresolvable` with a simple OR.
 func TestDirectedGraph_OneUnresolvableOrDependency(t *testing.T) {
 	testSingleResolutionDependency(t, dgraph.Unresolvable, dgraph.Unresolvable,
 		func(dependentNode dgraph.Node[string], dependencyNode1 dgraph.Node[string]) {
@@ -431,7 +432,7 @@ func TestDirectedGraph_OneUnresolvableOrDependency(t *testing.T) {
 	)
 }
 
-// Test unresolvable with two AND with one unresolvable.
+// Test two ANDs with one `Unresolvable`.
 func TestDirectedGraph_TwoAndsOneUnresolvable(t *testing.T) {
 	d := dgraph.New[string]()
 	dependentNode, err := d.AddNode("dependent-node", "dependent Node")
@@ -451,7 +452,7 @@ func TestDirectedGraph_TwoAndsOneUnresolvable(t *testing.T) {
 	assert.SliceContains(t, dependencyNode1, readyNodes)
 	assert.SliceContains(t, dependencyNode2, readyNodes)
 
-	// Resolve one AND as unresolvable. That should exit early as unresolvable.
+	// Resolve one AND as `Unresolvable`. That should cause `dependentNode` to become ready and `Unresolvable`.
 	assert.NoError(t, dependencyNode1.ResolveNode(dgraph.Unresolvable))
 
 	readyNodes = d.PopReadyNodes()
@@ -477,8 +478,8 @@ func TestDirectedGraph_ChainedAndDependenciesUnresolvable(t *testing.T) {
 	readyNodes := d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.SliceContains(t, dependencyNode, readyNodes)
-	// First, mark the first dependency as unresolvable. This should make all nodes that depend
-	// on it, directly or indirectly, unresolvable if not completion dependencies.
+	// First, mark the first dependency as `Unresolvable`. This should make all nodes that depend
+	// on it, directly or indirectly, `Unresolvable` if not completion dependencies.
 	assert.NoError(t, dependencyNode.ResolveNode(dgraph.Unresolvable))
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 2)
@@ -488,7 +489,7 @@ func TestDirectedGraph_ChainedAndDependenciesUnresolvable(t *testing.T) {
 	assert.Equals(t, dependentNode.ResolutionStatus(), dgraph.Unresolvable)
 }
 
-// Test unresolvable with two OR with one unresolvable and one resolved.
+// Test `Unresolvable` with two OR with one `Unresolvable` and one resolved.
 func TestDirectedGraph_TwoOrsOneUnresolvable(t *testing.T) {
 	d := dgraph.New[string]()
 	dependentNode, err := d.AddNode("dependent-node", "Dependent Node")
@@ -508,8 +509,8 @@ func TestDirectedGraph_TwoOrsOneUnresolvable(t *testing.T) {
 	assert.SliceContains(t, dependencyNode1, readyNodes)
 	assert.SliceContains(t, dependencyNode2, readyNodes)
 
-	// Resolve one OR as unresolvable. That alone is not enough to cause dependentNode to
-	// be marked unresolvable.
+	// Resolve one OR as `Unresolvable`. That alone is not enough to cause dependentNode to
+	// be marked `Unresolvable`.
 	assert.NoError(t, dependencyNode1.ResolveNode(dgraph.Unresolvable))
 	assert.Equals(t, len(d.PopReadyNodes()), 0)
 
@@ -520,7 +521,7 @@ func TestDirectedGraph_TwoOrsOneUnresolvable(t *testing.T) {
 	assert.Equals(t, readyNodes[0].ResolutionStatus(), dgraph.Waiting)
 }
 
-// Test unresolvable with a simple completion dependency.
+// Test `Unresolvable` with a simple completion dependency.
 func TestDirectedGraph_OneUnresolvableCompletionDependency(t *testing.T) {
 	testSingleResolutionDependency(t, dgraph.Unresolvable, dgraph.Waiting,
 		func(dependentNode dgraph.Node[string], dependencyNode1 dgraph.Node[string]) {
@@ -529,7 +530,7 @@ func TestDirectedGraph_OneUnresolvableCompletionDependency(t *testing.T) {
 	)
 }
 
-// Test unresolvable with a completion dependency and an AND.
+// Test `Unresolvable` with a completion dependency and an AND.
 func TestDirectedGraph_CompletionAndAnd(t *testing.T) {
 	d := dgraph.New[string]()
 	dependentNode, err := d.AddNode("dependent-node", "dependent Node")
@@ -548,9 +549,9 @@ func TestDirectedGraph_CompletionAndAnd(t *testing.T) {
 	assert.SliceContains(t, dependencyNodeCompletion, readyNodes)
 	assert.SliceContains(t, dependencyNodeAnd, readyNodes)
 
-	// Resolve the completion dependency as unresolvable. Because the dependency type is
-	// completion, dependentNode is not marked as unresolvable, and will still resolve if
-	// other dependencies are resolved.
+	// Resolve the completion dependency as `Unresolvable`. Because the dependency type is
+	// completion, dependentNode is not marked as `Unresolvable` and remains not ready
+	// until the other AND dependency is resolved.
 	assert.NoError(t, dependencyNodeCompletion.ResolveNode(dgraph.Unresolvable))
 	assert.Equals(t, len(d.PopReadyNodes()), 0)
 
@@ -558,10 +559,11 @@ func TestDirectedGraph_CompletionAndAnd(t *testing.T) {
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.Equals(t, readyNodes[0].ID(), dependentNode.ID())
+	// Since it was not marked as unresolved, the status should not propagate. Only the readiness should propagate.
 	assert.Equals(t, readyNodes[0].ResolutionStatus(), dgraph.Waiting)
 }
 
-// Test unresolvable with a completion dependency and two OR, with the completion dependency unresolvable.
+// Test `Unresolvable` with a completion dependency and two OR, with the completion dependency `Unresolvable`.
 func TestDirectedGraph_CompletionAndTwoOrs(t *testing.T) {
 	d := dgraph.New[string]()
 	dependentNode, err := d.AddNode("dependent-node", "dependent Node")
@@ -585,9 +587,9 @@ func TestDirectedGraph_CompletionAndTwoOrs(t *testing.T) {
 	assert.SliceContains(t, dependencyNodeOr1, readyNodes)
 	assert.SliceContains(t, dependencyNodeOr2, readyNodes)
 
-	// Resolve the completion dependency as unresolvable. Because the dependency type is
-	// completion, dependentNode is not marked as unresolvable, and will still resolve if
-	// other dependencies are resolved.
+	// Resolve the completion dependency as `Unresolvable`. Because the dependency type is
+	// completion, dependentNode is not marked as `Unresolvable` and the node remains not
+	// ready until an OR dependency is resolved.
 	assert.NoError(t, dependencyNodeCompletion.ResolveNode(dgraph.Unresolvable))
 	assert.Equals(t, len(d.PopReadyNodes()), 0)
 
@@ -595,10 +597,11 @@ func TestDirectedGraph_CompletionAndTwoOrs(t *testing.T) {
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.Equals(t, readyNodes[0].ID(), dependentNode.ID())
+	// Since it was not marked as unresolved, the status should not propagate. Only the readiness should propagate.
 	assert.Equals(t, readyNodes[0].ResolutionStatus(), dgraph.Waiting)
 }
 
-// Test unresolvable with two ORs and two ANDs, with an AND being unresolvable.
+// Test `Unresolvable` with two ORs and two ANDs, with an AND being `Unresolvable`.
 func TestDirectedGraph_UnresolvableAndsWithOrs(t *testing.T) {
 	d := dgraph.New[string]()
 	dependentNode, err := d.AddNode("dependent-node", "dependent Node")
@@ -626,7 +629,7 @@ func TestDirectedGraph_UnresolvableAndsWithOrs(t *testing.T) {
 	assert.SliceContains(t, dependencyNodeOr1, readyNodes)
 	assert.SliceContains(t, dependencyNodeOr2, readyNodes)
 
-	// Resolve an AND as unresolvable. This should cause instant propagation of the unresolvable
+	// Resolve an AND as `Unresolvable`. This should cause instant propagation of the `Unresolvable`
 	// state to dependentNode.
 	assert.NoError(t, dependencyNodeAnd1.ResolveNode(dgraph.Unresolvable))
 	readyNodes = d.PopReadyNodes()
@@ -635,7 +638,7 @@ func TestDirectedGraph_UnresolvableAndsWithOrs(t *testing.T) {
 	assert.Equals(t, readyNodes[0].ResolutionStatus(), dgraph.Unresolvable)
 }
 
-// Test unresolvable with two ORs and two ANDs, with an OR being unresolvable.
+// Test `Unresolvable` with two ORs and two ANDs, with an OR being `Unresolvable`.
 func TestDirectedGraph_UnresolvableOrsWithAnds(t *testing.T) {
 	d := dgraph.New[string]()
 	dependentNode, err := d.AddNode("dependent-node", "dependent Node")
@@ -666,6 +669,8 @@ func TestDirectedGraph_UnresolvableOrsWithAnds(t *testing.T) {
 	assert.NoError(t, dependencyNodeOr1.ResolveNode(dgraph.Unresolvable))
 	assert.Equals(t, len(d.PopReadyNodes()), 0)
 
+	// Resolve the last OR as `Unresolvable`. This should cause instant propagation of the `Unresolvable`
+	// state to dependentNode because none of the ORs could resolve, making dependentNode `Unresolvable`.
 	assert.NoError(t, dependencyNodeOr2.ResolveNode(dgraph.Unresolvable))
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
@@ -700,13 +705,14 @@ func TestDirectedGraph_TestWaitingResolution(t *testing.T) {
 	assert.NoError(t, err)
 	dependencyNode1, err := d.AddNode("dependency-node-1", "Dependency 1")
 	assert.NoError(t, err)
-	// Add a connection to test propagation (or proper lack of propagation) with
-	// the waiting resolution status.
+	// Add a connection in case ResolveNode's behavior changes due to the presence of the connection.
 	assert.NoError(t, dependentNode.ConnectDependency(dependencyNode1.ID(), dgraph.AndDependency))
 	err = dependencyNode1.ResolveNode(dgraph.Waiting)
 	assert.NoError(t, err)
 }
 
+// This test is here just to validate that multi-threaded usage does not cause any problems.
+// Recommended to run with `-race` and `-count 10000`
 func TestDirectedGraph_TwoOrDependenciesMultiThreaded(t *testing.T) {
 	d := dgraph.New[string]()
 	dependentNode, err := d.AddNode("dependent-node", "Dependent Node")
@@ -716,13 +722,21 @@ func TestDirectedGraph_TwoOrDependenciesMultiThreaded(t *testing.T) {
 	dependencyNode2, err := d.AddNode("dependency-node-2", "Dependency 2")
 	assert.NoError(t, err)
 
-	assert.NoError(t, dependentNode.ConnectDependency(dependencyNode1.ID(), dgraph.OrDependency))
-	assert.NoError(t, dependentNode.ConnectDependency(dependencyNode2.ID(), dgraph.OrDependency))
-
-	assert.NoError(t, d.PushStartingNodes())
 	wg := sync.WaitGroup{}
 	wg.Add(2)
-	// Resolve one node: dependencyNode1
+	go func() {
+		defer wg.Done()
+		assert.NoError(t, dependentNode.ConnectDependency(dependencyNode1.ID(), dgraph.OrDependency))
+	}()
+	go func() {
+		defer wg.Done()
+		assert.NoError(t, dependentNode.ConnectDependency(dependencyNode2.ID(), dgraph.OrDependency))
+	}()
+	wg.Wait()
+
+	assert.NoError(t, d.PushStartingNodes())
+	wg = sync.WaitGroup{}
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		assert.NoError(t, dependencyNode1.ResolveNode(dgraph.Resolved))

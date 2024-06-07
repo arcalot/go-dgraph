@@ -89,9 +89,8 @@ type Node[NodeType any] interface {
 	// The resolution must happen only one time, or else a ErrNodeResolutionAlreadySet is returned.
 	// This transitions the resolution status from the existing state (typically Waiting) to the given state.
 	ResolveNode(status ResolutionStatus) error
-	// ResolutionStatus returns the resolution status. See the ResolutionStatus type.
-	// This is separate from the ready status (see IsReady).
-	// If a required dependency is marked unresolvable, the node's status will be set to Unresolvable.
+	// ResolutionStatus returns the resolution status and the ready state. See the ResolutionStatus type.
+	// If a required dependency is marked `Unresolvable`, the node's status will be set to `Unresolvable`.
 	ResolutionStatus() ResolutionStatus
 	// IsReady returns whether the node's dependencies have been resolved, making this node ready for processing.
 	// Recommended for debugging and testing.

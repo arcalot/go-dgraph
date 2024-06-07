@@ -298,11 +298,12 @@ func (n *node[NodeType]) resolveNode(status ResolutionStatus) error {
 	if n.deleted {
 		return ErrNodeDeleted{n.id}
 	}
-	if n.status == "" {
-		return ErrNodeResolutionUnknown{n.id, n.status}
-	}
 	if n.status != Waiting {
-		return ErrNodeResolutionAlreadySet{n.id, n.status, status}
+		if status == Resolved || status == Unresolvable {
+			return ErrNodeResolutionAlreadySet{n.id, n.status, status}
+		} else {
+			return ErrNodeResolutionUnknown{n.id, n.status}
+		}
 	}
 	n.status = status
 	if status == Waiting {
