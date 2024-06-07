@@ -411,7 +411,7 @@ func (n *node[NodeType]) ListOutboundConnections() (map[string]Node[NodeType], e
 	return result, nil
 }
 
-// dependencyResolved is used to notify a node that one of that node's dependencies have had their resolution
+// dependencyResolved is used to notify a node that one of that node's dependencies has had its resolution
 // status set. Once all dependencies are resolved, the node is set as finalized (ready for processing).
 // Caller should have appropriate mutex locked before calling.
 func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyResolution ResolutionStatus) error {
