@@ -1,6 +1,7 @@
 package dgraph_test
 
 import (
+	"sync"
 	"testing"
 
 	"go.arcalot.io/assert"
@@ -704,4 +705,34 @@ func TestDirectedGraph_TestWaitingResolution(t *testing.T) {
 	assert.NoError(t, dependentNode.ConnectDependency(dependencyNode1.ID(), dgraph.AndDependency))
 	err = dependencyNode1.ResolveNode(dgraph.Waiting)
 	assert.NoError(t, err)
+}
+
+func TestDirectedGraph_TwoOrDependenciesMultiThreaded(t *testing.T) {
+	d := dgraph.New[string]()
+	dependentNode, err := d.AddNode("dependent-node", "Dependent Node")
+	assert.NoError(t, err)
+	dependencyNode1, err := d.AddNode("dependency-node-1", "Dependency 1")
+	assert.NoError(t, err)
+	dependencyNode2, err := d.AddNode("dependency-node-2", "Dependency 2")
+	assert.NoError(t, err)
+
+	assert.NoError(t, dependentNode.ConnectDependency(dependencyNode1.ID(), dgraph.OrDependency))
+	assert.NoError(t, dependentNode.ConnectDependency(dependencyNode2.ID(), dgraph.OrDependency))
+
+	assert.NoError(t, d.PushStartingNodes())
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	// Resolve one node: dependencyNode1
+	go func() {
+		defer wg.Done()
+		assert.NoError(t, dependencyNode1.ResolveNode(dgraph.Resolved))
+	}()
+	go func() {
+		defer wg.Done()
+		readyStatus := dependencyNode2.IsReady()
+		resolutionStatus := dependencyNode1.ResolutionStatus()
+		t.Logf("Raced async ready status: %t", readyStatus)
+		t.Logf("Raced async resolution status: %s", resolutionStatus)
+	}()
+	wg.Wait()
 }
