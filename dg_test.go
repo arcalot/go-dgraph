@@ -334,10 +334,10 @@ func TestDirectedGraph_TwoOrAndTwoAndDependencies(t *testing.T) {
 	assert.NoError(t, dependencyNodeOr1.ResolveNode(dgraph.Resolved))
 	assert.Equals(t, len(d.PopReadyNodes()), 0)
 	// Resolve the final AND. This should result in the node being ready now.
+	// We have now resolved one OR and both ANDs. One OR is enough, so there was no need
+	// to resolve dependencyNodeOr2, too.
 	assert.NoError(t, dependencyNodeAnd2.ResolveNode(dgraph.Resolved))
 	readyNodes = d.PopReadyNodes()
-	// To get to this point, we resolved one OR and both ANDs. One OR is enough, so there was no need
-	// to resolve dependencyNodeOr2, too.
 	assert.Equals(t, len(readyNodes), 1)
 	assert.Equals(t, readyNodes[0].ID(), dependentNode.ID())
 }
@@ -478,8 +478,9 @@ func TestDirectedGraph_ChainedAndDependenciesUnresolvable(t *testing.T) {
 	readyNodes := d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.SliceContains(t, dependencyNode, readyNodes)
-	// First, mark the first dependency as `Unresolvable`. This should make all nodes that depend
-	// on it, directly or indirectly, `Unresolvable` if not completion dependencies.
+	// First, mark the first dependency as `Unresolvable`. This should make all nodes that
+	// depend on it, directly or indirectly, `Unresolvable`, since none of the connections
+	// have a completion dependency type.
 	assert.NoError(t, dependencyNode.ResolveNode(dgraph.Unresolvable))
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 2)
@@ -707,8 +708,15 @@ func TestDirectedGraph_TestWaitingResolution(t *testing.T) {
 	assert.NoError(t, err)
 	// Add a connection in case ResolveNode's behavior changes due to the presence of the connection.
 	assert.NoError(t, dependentNode.ConnectDependency(dependencyNode1.ID(), dgraph.AndDependency))
+	// Push and clear starting nodes.
+	assert.NoError(t, d.PushStartingNodes())
+	readyNodes := d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 1)
 	err = dependencyNode1.ResolveNode(dgraph.Waiting)
 	assert.NoError(t, err)
+	// It's waiting, still, so nothing should resolve.
+	readyNodes = d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 0)
 }
 
 // This test is here just to validate that multi-threaded usage does not cause any problems.

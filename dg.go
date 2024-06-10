@@ -302,25 +302,25 @@ func (n *node[NodeType]) ResolveNode(status ResolutionStatus) error {
 }
 
 // Caller should have appropriate mutex locked before calling.
-func (n *node[NodeType]) resolveNode(status ResolutionStatus) error {
+func (n *node[NodeType]) resolveNode(newStatus ResolutionStatus) error {
 	if n.deleted {
 		return ErrNodeDeleted{n.id}
 	}
 	if n.status != Waiting {
-		if status == Resolved || status == Unresolvable {
-			return ErrNodeResolutionAlreadySet{n.id, n.status, status}
+		if n.status == Resolved || n.status == Unresolvable {
+			return ErrNodeResolutionAlreadySet{n.id, n.status, newStatus}
 		} else {
 			return ErrNodeResolutionUnknown{n.id, n.status}
 		}
 	}
-	n.status = status
-	if status == Waiting {
+	n.status = newStatus
+	if newStatus == Waiting {
 		return nil // Don't propagate a waiting status.
 	}
 	// Propagate to outbound connections.
 	outboundConnections := n.dg.connectionsFromNode[n.ID()]
 	for outboundConnectionID := range outboundConnections {
-		err := n.dg.nodes[outboundConnectionID].dependencyResolved(n.ID(), status)
+		err := n.dg.nodes[outboundConnectionID].dependencyResolved(n.ID(), newStatus)
 		if err != nil {
 			return err
 		}
