@@ -48,7 +48,9 @@ type DirectedGraph[NodeType any] interface {
 	// resolved or unresolvable, and clears the list.
 	// A node becomes ready to process when all of its AND dependencies and at least one of
 	// its OR dependencies are resolved.
-	PopReadyNodes() []*node[NodeType]
+	PopReadyNodes() map[string]ResolutionStatus
+	// HasReadyNodes Checks to see if there are any ready nodes without clearing them.
+	HasReadyNodes() bool
 	// PushStartingNodes searches for the initial ready nodes without dependencies and saves them.
 	// The nodes can then be retrieved with a call to `PopReadyNodes()`.
 	// Recommended to be called only once following construction of the DAG.
@@ -89,16 +91,6 @@ type Node[NodeType any] interface {
 	// The resolution must happen only one time, or else a ErrNodeResolutionAlreadySet is returned.
 	// This transitions the resolution status from the existing state (typically Waiting) to the given state.
 	ResolveNode(status ResolutionStatus) error
-	// ResolutionStatus returns the resolution status. See the ResolutionStatus type.
-	// If a required dependency is marked `Unresolvable`, the node's status will be set to `Unresolvable`.
-	ResolutionStatus() ResolutionStatus
-	// IsReady returns whether the node's dependencies have been resolved, making this node ready for processing.
-	// Recommended for debugging and testing.
-	// A node becomes ready to process when all of its AND dependencies and at least one of
-	// its OR dependencies are resolved.
-	// If marked not ready, the value may change at any time. For a reliable method of getting the node when it
-	// is ready, call `PopReadyNodes()`. Once a node is marked ready, it is final and cannot be marked not ready.
-	IsReady() bool
 	// OutstandingDependencies returns a map of the dependency node ID to the DependencyType of the dependency.
 	OutstandingDependencies() map[string]DependencyType
 }

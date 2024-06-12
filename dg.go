@@ -223,25 +223,43 @@ func (d *directedGraph[NodeType]) PushStartingNodes() error {
 	defer d.lock.Unlock()
 
 	for nodeID, n := range d.nodes {
+		// Search for nodes that have either no outstanding dependencies, or only
+		// obviated dependencies.
 		if len(n.outstandingDependencies) == 0 {
 			d.readyForProcessing[nodeID] = n
+		} else {
+			// Has nodes left. Check to see if they are all obviated.
+			hasNonObviatedDependencies := false
+			for _, dependency := range n.outstandingDependencies {
+				if dependency != ObviatedDependency {
+					hasNonObviatedDependencies = true
+					break
+				}
+			}
+			if !hasNonObviatedDependencies {
+				d.readyForProcessing[nodeID] = n
+			}
 		}
 	}
 	return nil
 }
 
-func (d *directedGraph[NodeType]) PopReadyNodes() []*node[NodeType] {
+func (d *directedGraph[NodeType]) HasReadyNodes() bool {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	return len(d.readyForProcessing) != 0
+}
+
+func (d *directedGraph[NodeType]) PopReadyNodes() map[string]ResolutionStatus {
 	d.lock.Lock()
 	// Transfer the map to a local variable to minimize time locked, and reset the graph's value.
 	readyMap := d.readyForProcessing
 	d.readyForProcessing = make(map[string]*node[NodeType])
 	d.lock.Unlock()
 
-	result := make([]*node[NodeType], len(readyMap))
-	i := 0
+	result := make(map[string]ResolutionStatus)
 	for _, node := range readyMap {
-		result[i] = node
-		i += 1
+		result[node.ID()] = node.status
 	}
 	return result
 }
@@ -262,28 +280,6 @@ func (n *node[NodeType]) ID() string {
 
 func (n *node[NodeType]) Item() NodeType {
 	return n.item
-}
-
-func (n *node[NodeType]) ResolutionStatus() ResolutionStatus {
-	// Since the status can be changed by another thread, we access it under a
-	// lock here to prevent Go from reporting a data race; however, the actual
-	// status may change as soon as the lock is released, and so the return
-	// value, unless it is a terminal value, does not necessarily represent the
-	// current value.
-	n.dg.lock.Lock()
-	defer n.dg.lock.Unlock()
-	return n.status
-}
-
-func (n *node[NodeType]) IsReady() bool {
-	// Since the ready state can be changed by another thread, we access it under a
-	// lock here to prevent Go from reporting a data race; however, the actual
-	// ready state may change as soon as the lock is released, and so the return
-	// value, unless it is a terminal value, does not necessarily represent the
-	// current value.
-	n.dg.lock.Lock()
-	defer n.dg.lock.Unlock()
-	return n.ready
 }
 
 func (n *node[NodeType]) OutstandingDependencies() map[string]DependencyType {
