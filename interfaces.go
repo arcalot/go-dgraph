@@ -49,7 +49,7 @@ type DirectedGraph[NodeType any] interface {
 	// A node becomes ready to process when all of its AND dependencies and at least one of
 	// its OR dependencies are resolved.
 	PopReadyNodes() map[string]ResolutionStatus
-	// HasReadyNodes Checks to see if there are any ready nodes without clearing them.
+	// HasReadyNodes checks to see if there are any ready nodes without clearing them.
 	HasReadyNodes() bool
 	// PushStartingNodes searches for the initial ready nodes without dependencies and saves them.
 	// The nodes can then be retrieved with a call to `PopReadyNodes()`.

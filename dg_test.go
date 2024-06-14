@@ -164,6 +164,7 @@ func testSingleResolutionDependency(
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.MapContainsKey(t, dependentNode.ID(), readyNodes)
+	assert.Equals(t, readyNodes[dependentNode.ID()], expectedDependentNodeResolution)
 }
 
 func TestDirectedGraph_OneAndDependencyConnect(t *testing.T) {
@@ -240,7 +241,6 @@ func TestDirectedGraph_ChainedAndDependencies(t *testing.T) {
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.MapContainsKey(t, dependentNode.ID(), readyNodes)
-
 }
 
 func TestDirectedGraph_OneOrDependency(t *testing.T) {
@@ -297,7 +297,6 @@ func TestDirectedGraph_TwoOrDependenciesResolveSecond(t *testing.T) {
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.MapContainsKey(t, dependentNode.ID(), readyNodes)
-
 }
 
 // Test two ANDs and two OR dependencies, with one OR resolving before the ANDs.
@@ -342,7 +341,6 @@ func TestDirectedGraph_TwoOrAndTwoAndDependencies(t *testing.T) {
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.MapContainsKey(t, dependentNode.ID(), readyNodes)
-
 }
 
 // Test one AND and two OR dependencies, with both ORs resolving before the AND.
@@ -379,7 +377,6 @@ func TestDirectedGraph_BothOrAndOneAndDependencies(t *testing.T) {
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.MapContainsKey(t, dependentNode.ID(), readyNodes)
-
 }
 
 // Test an AND and two OR dependencies, with the AND resolving before either OR.
@@ -416,7 +413,6 @@ func TestDirectedGraph_OneAndAndTwoOrDependencies(t *testing.T) {
 	readyNodes = d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 1)
 	assert.MapContainsKey(t, dependentNode.ID(), readyNodes)
-
 }
 
 // Test `Unresolvable` with a simple AND
@@ -744,6 +740,5 @@ func TestDirectedGraph_PushStartingNodes(t *testing.T) {
 	readyNodes := d.PopReadyNodes()
 	assert.Equals(t, len(readyNodes), 2)
 	assert.MapContainsKey(t, noDependencies.ID(), readyNodes)
-	// Obviated dependencies should not count, so it should have been marked ready.
 	assert.MapContainsKey(t, onlyObviatedDependencies.ID(), readyNodes)
 }

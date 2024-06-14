@@ -222,24 +222,14 @@ func (d *directedGraph[NodeType]) PushStartingNodes() error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
+nextNode:
 	for nodeID, n := range d.nodes {
-		// Search for nodes that have either no outstanding dependencies, or only
-		// obviated dependencies.
-		if len(n.outstandingDependencies) == 0 {
-			d.readyForProcessing[nodeID] = n
-		} else {
-			// Has nodes left. Check to see if they are all obviated.
-			hasNonObviatedDependencies := false
-			for _, dependency := range n.outstandingDependencies {
-				if dependency != ObviatedDependency {
-					hasNonObviatedDependencies = true
-					break
-				}
-			}
-			if !hasNonObviatedDependencies {
-				d.readyForProcessing[nodeID] = n
+		for _, dependency := range n.outstandingDependencies {
+			if dependency != ObviatedDependency {
+				continue nextNode
 			}
 		}
+		d.readyForProcessing[nodeID] = n
 	}
 	return nil
 }
