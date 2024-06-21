@@ -32,6 +32,9 @@ type directedGraph[NodeType any] struct {
 var errorPathRegex, _ = regexp.Compile(`\.(?:error|crashed|failed|deploy_failed)$`)
 
 func (d *directedGraph[NodeType]) Mermaid() string {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
 	result := []string{
 		"%% Mermaid markdown workflow",
 		"flowchart LR",
@@ -293,8 +296,10 @@ func (n *node[NodeType]) resolveNode(newStatus ResolutionStatus) error {
 		return ErrNodeDeleted{n.id}
 	}
 	if n.status != Waiting {
-		if n.status == Resolved || n.status == Unresolvable {
+		if n.status == Resolved || n.status == Unresolvable && newStatus != Unresolvable {
 			return ErrNodeResolutionAlreadySet{n.id, n.status, newStatus}
+		} else if n.status == Unresolvable {
+			return nil // Allow nodes to be unresolved multiple times. But no processing is required.
 		} else {
 			return ErrNodeResolutionUnknown{n.id, n.status}
 		}
