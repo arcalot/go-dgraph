@@ -32,6 +32,9 @@ type directedGraph[NodeType any] struct {
 var errorPathRegex, _ = regexp.Compile(`\.(?:error|crashed|failed|deploy_failed)$`)
 
 func (d *directedGraph[NodeType]) Mermaid() string {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
 	result := []string{
 		"%% Mermaid markdown workflow",
 		"flowchart LR",
