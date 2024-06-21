@@ -296,7 +296,7 @@ func (n *node[NodeType]) resolveNode(newStatus ResolutionStatus) error {
 		return ErrNodeDeleted{n.id}
 	}
 	if n.status != Waiting {
-		if n.status == Resolved {
+		if n.status == Resolved || n.status == Unresolvable && newStatus != Unresolvable {
 			return ErrNodeResolutionAlreadySet{n.id, n.status, newStatus}
 		} else if n.status == Unresolvable {
 			return nil // Allow nodes to be unresolved multiple times. But no processing is required.
