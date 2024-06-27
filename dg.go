@@ -247,15 +247,14 @@ func (d *directedGraph[NodeType]) PopReadyNodes() map[string]ResolutionStatus {
 	result := make(map[string]ResolutionStatus)
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	// Transfer the map to a local variable to minimize time locked, and reset the graph's value.
-	readyMap := d.readyForProcessing
-	d.readyForProcessing = make(map[string]*node[NodeType])
-
-	for _, node := range readyMap {
-		// Technically, while unlikely, it's possible for the node's status to race with
-		// this access of node.status.
+	for _, node := range d.readyForProcessing {
+		// There are some conditions that may result in the status being modified,
+		// so this needs to be done under lock.
+		// For example, a ready waiting node being marked Resolved or Unresolvable by
+		// a user that retrieves the node by ID.
 		result[node.ID()] = node.status
 	}
+	clear(d.readyForProcessing)
 	return result
 }
 
