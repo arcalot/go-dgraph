@@ -182,6 +182,22 @@ func TestDirectedGraph_OneAndDependencyConnectDependency(t *testing.T) {
 		})
 }
 
+func TestDirectedGraph_ResolvingSingleNode(t *testing.T) {
+	// This test makes sure that it's only dependent nodes that get marked as ready.
+	// Since there are no dependencies connected here, there should be no nodes marked as ready.
+	d := dgraph.New[string]()
+	resolvedNode, err := d.AddNode("resolved-node", "resolved-node")
+	unresolvableNode, err := d.AddNode("unresolvable-node", "unresolvable-node")
+	assert.NoError(t, err)
+	// Purposefully skip PushStartingNodes. This tests the behavior of a single node.
+	// Calling PushStartingNodes would add both nodes to the list.
+	assert.Equals(t, d.HasReadyNodes(), false)
+	assert.NoError(t, resolvedNode.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, d.HasReadyNodes(), false)
+	assert.NoError(t, unresolvableNode.ResolveNode(dgraph.Unresolvable))
+	assert.Equals(t, d.HasReadyNodes(), false)
+}
+
 func TestDirectedGraph_TwoAndDependencies(t *testing.T) {
 	d := dgraph.New[string]()
 	dependentNode, err := d.AddNode("dependent-node", "Dependent Node")
