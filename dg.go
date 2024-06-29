@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -40,8 +41,7 @@ func (d *directedGraph[NodeType]) Mermaid() string {
 		"flowchart LR",
 		"%% Success path",
 	}
-
-	errorPath := []string{"%% Error path"}
+	var successPath, errorPath []string
 
 	for source, d := range d.connectionsFromNode {
 		for destination := range d {
@@ -50,13 +50,17 @@ func (d *directedGraph[NodeType]) Mermaid() string {
 			if isErrorPath {
 				errorPath = append(errorPath, connection)
 			} else {
-				result = append(result, connection)
+				successPath = append(successPath, connection)
 			}
 		}
 	}
 
-	result = append(result, errorPath...)
+	slices.Sort(successPath)
+	slices.Sort(errorPath)
 
+	result = append(result, successPath...)
+	result = append(result, "%% Error path")
+	result = append(result, errorPath...)
 	result = append(result, "%% Mermaid end")
 	return strings.Join(result, "\n") + "\n"
 }
