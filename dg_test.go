@@ -183,10 +183,12 @@ func TestDirectedGraph_OneAndDependencyConnectDependency(t *testing.T) {
 }
 
 func TestDirectedGraph_ResolvingSingleNode(t *testing.T) {
-	// This test makes sure that it's only dependent nodes that get marked as ready.
-	// Since there are no dependencies connected here, there should be no nodes marked as ready.
+	// This test makes sure that only dependent nodes get marked as ready.
+	// Since there are no dependencies between nodes here, marking nodes as resolved
+	// should not cause any nodes to be placed on the ready list.
 	d := dgraph.New[string]()
 	resolvedNode, err := d.AddNode("resolved-node", "resolved-node")
+	assert.NoError(t, err)
 	unresolvableNode, err := d.AddNode("unresolvable-node", "unresolvable-node")
 	assert.NoError(t, err)
 	// Purposefully skip PushStartingNodes. This tests the behavior of a single node.
