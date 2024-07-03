@@ -182,6 +182,24 @@ func TestDirectedGraph_OneAndDependencyConnectDependency(t *testing.T) {
 		})
 }
 
+func TestDirectedGraph_ResolvingSingleNode(t *testing.T) {
+	// This test makes sure that only dependent nodes get marked as ready.
+	// Since there are no dependencies between nodes here, marking nodes as resolved
+	// should not cause any nodes to be placed on the ready list.
+	d := dgraph.New[string]()
+	resolvedNode, err := d.AddNode("resolved-node", "resolved-node")
+	assert.NoError(t, err)
+	unresolvableNode, err := d.AddNode("unresolvable-node", "unresolvable-node")
+	assert.NoError(t, err)
+	// Purposefully skip PushStartingNodes. This tests the behavior of a single node.
+	// Calling PushStartingNodes would add both nodes to the list.
+	assert.Equals(t, d.HasReadyNodes(), false)
+	assert.NoError(t, resolvedNode.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, d.HasReadyNodes(), false)
+	assert.NoError(t, unresolvableNode.ResolveNode(dgraph.Unresolvable))
+	assert.Equals(t, d.HasReadyNodes(), false)
+}
+
 func TestDirectedGraph_TwoAndDependencies(t *testing.T) {
 	d := dgraph.New[string]()
 	dependentNode, err := d.AddNode("dependent-node", "Dependent Node")
@@ -741,4 +759,58 @@ func TestDirectedGraph_PushStartingNodes(t *testing.T) {
 	assert.Equals(t, len(readyNodes), 2)
 	assert.MapContainsKey(t, noDependencies.ID(), readyNodes)
 	assert.MapContainsKey(t, onlyObviatedDependencies.ID(), readyNodes)
+}
+
+// TestDirectedGraph_Mermaid builds the dependency graph from the basic example
+// in the Arcaflow workflows repo
+// https://github.com/arcalot/arcaflow-workflows/blob/main/basic-examples/basic/README.md
+// and then checks that the output for the Mermaid flow diagram is as expected.
+func TestDirectedGraph_Mermaid(t *testing.T) {
+	expected := `%% Mermaid markdown workflow
+flowchart LR
+%% Success path
+input-->steps.example.starting
+steps.example.cancelled-->steps.example.outputs
+steps.example.deploy-->steps.example.starting
+steps.example.disabled-->steps.example.disabled.output
+steps.example.enabling-->steps.example.disabled
+steps.example.enabling-->steps.example.enabling.resolved
+steps.example.enabling-->steps.example.starting
+steps.example.outputs-->steps.example.outputs.success
+steps.example.outputs.success-->outputs.success
+steps.example.starting-->steps.example.running
+steps.example.starting-->steps.example.starting.started
+%% Error path
+%% Mermaid end
+`
+
+	d := dgraph.New[string]()
+
+	seos := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.outputs.success", "seos"))
+	os := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("outputs.success", "os"))
+	see := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.enabling", "see"))
+	ses := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.starting", "ses"))
+	sedi := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.disabled", "sedi"))
+	seer := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.enabling.resolved", "seer"))
+	seo := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.outputs", "seo"))
+	sec := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.cancelled", "sec"))
+	sedo := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.disabled.output", "sedo"))
+	i := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("input", "i"))
+	sede := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.deploy", "sede"))
+	sess := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.starting.started", "sess"))
+	ser := assert.NoErrorR[dgraph.Node[string]](t)(d.AddNode("steps.example.running", "ser"))
+
+	assert.NoError(t, os.ConnectDependency(seos.ID(), dgraph.AndDependency))
+	assert.NoError(t, ses.ConnectDependency(see.ID(), dgraph.AndDependency))
+	assert.NoError(t, sedi.ConnectDependency(see.ID(), dgraph.AndDependency))
+	assert.NoError(t, seer.ConnectDependency(see.ID(), dgraph.AndDependency))
+	assert.NoError(t, seos.ConnectDependency(seo.ID(), dgraph.AndDependency))
+	assert.NoError(t, seo.ConnectDependency(sec.ID(), dgraph.AndDependency))
+	assert.NoError(t, sedo.ConnectDependency(sedi.ID(), dgraph.AndDependency))
+	assert.NoError(t, ses.ConnectDependency(i.ID(), dgraph.AndDependency))
+	assert.NoError(t, ses.ConnectDependency(sede.ID(), dgraph.AndDependency))
+	assert.NoError(t, sess.ConnectDependency(ses.ID(), dgraph.AndDependency))
+	assert.NoError(t, ser.ConnectDependency(ses.ID(), dgraph.AndDependency))
+
+	assert.Equals(t, d.Mermaid(), expected)
 }

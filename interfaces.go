@@ -44,15 +44,16 @@ type DirectedGraph[NodeType any] interface {
 	Clone() DirectedGraph[NodeType]
 	// HasCycles performs cycle detection and returns true if the DirectedGraph has cycles.
 	HasCycles() bool
-	// PopReadyNodes returns of a list of all nodes that have finalized their status, whether
-	// resolved or unresolvable, and clears the list. Statuses may be stale after return.
-	// A node becomes ready to process when all of its AND dependencies and at least one of
+	// PopReadyNodes returns of a list of all nodes that have no outstanding required dependencies,
+	// and are therefore ready, and clears the list.
+	// A node becomes ready when all of its AND dependencies and at least one of
 	// its OR dependencies are resolved.
+	// Note that the resolution state of a node is independent of its readiness and that the
+	// status varies depending on the behavior of the calling code.
 	PopReadyNodes() map[string]ResolutionStatus
 	// HasReadyNodes checks to see if there are any ready nodes without clearing them.
 	HasReadyNodes() bool
-	// PushStartingNodes searches for the initial ready nodes without dependencies and saves them.
-	// The nodes can then be retrieved with a call to `PopReadyNodes()`.
+	// PushStartingNodes initializes the list which is retrieved using `PopReadyNodes()`.
 	// Recommended to be called only once following construction of the DAG.
 	PushStartingNodes() error
 
