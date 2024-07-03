@@ -245,13 +245,13 @@ func (d *directedGraph[NodeType]) HasReadyNodes() bool {
 
 func (d *directedGraph[NodeType]) PopReadyNodes() map[string]ResolutionStatus {
 	result := make(map[string]ResolutionStatus)
+	// The statuses may be modified while or after this function is called,
+	// so this needs to be done under lock to satisfy the go race detector.
+	// For example, a ready waiting node being marked Resolved or Unresolvable by
+	// a user that retrieves the node by ID.
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	for _, node := range d.readyForProcessing {
-		// There are some conditions that may result in the status being modified,
-		// so this needs to be done under lock.
-		// For example, a ready waiting node being marked Resolved or Unresolvable by
-		// a user that retrieves the node by ID.
 		result[node.ID()] = node.status
 	}
 	clear(d.readyForProcessing)

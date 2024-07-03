@@ -45,7 +45,7 @@ type DirectedGraph[NodeType any] interface {
 	// HasCycles performs cycle detection and returns true if the DirectedGraph has cycles.
 	HasCycles() bool
 	// PopReadyNodes returns of a list of all nodes that have finalized their status, whether
-	// resolved or unresolvable, and clears the list.
+	// resolved or unresolvable, and clears the list. Statuses may be stale after return.
 	// A node becomes ready to process when all of its AND dependencies and at least one of
 	// its OR dependencies are resolved.
 	PopReadyNodes() map[string]ResolutionStatus
