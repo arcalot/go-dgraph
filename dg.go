@@ -248,16 +248,17 @@ func (d *directedGraph[NodeType]) HasReadyNodes() bool {
 }
 
 func (d *directedGraph[NodeType]) PopReadyNodes() map[string]ResolutionStatus {
-	d.lock.Lock()
-	// Transfer the map to a local variable to minimize time locked, and reset the graph's value.
-	readyMap := d.readyForProcessing
-	d.readyForProcessing = make(map[string]*node[NodeType])
-	d.lock.Unlock()
-
 	result := make(map[string]ResolutionStatus)
-	for _, node := range readyMap {
+	// The statuses may be modified while or after this function is called,
+	// so this needs to be done under lock to satisfy the go race detector.
+	// For example, a ready waiting node being marked Resolved or Unresolvable by
+	// a user that retrieves the node by ID.
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	for _, node := range d.readyForProcessing {
 		result[node.ID()] = node.status
 	}
+	clear(d.readyForProcessing)
 	return result
 }
 
