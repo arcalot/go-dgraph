@@ -86,6 +86,7 @@ func (d *directedGraph[NodeType]) Clone() DirectedGraph[NodeType] {
 			ready:                   nodeData.ready,
 			status:                  nodeData.status,
 			outstandingDependencies: maps.Clone(nodeData.outstandingDependencies),
+			resolvedDependencies:    maps.Clone(nodeData.resolvedDependencies),
 		}
 	}
 
@@ -146,6 +147,7 @@ func (d *directedGraph[NodeType]) AddNode(id string, item NodeType) (Node[NodeTy
 		item:                    item,
 		status:                  Waiting,
 		outstandingDependencies: make(map[string]DependencyType),
+		resolvedDependencies:    make(map[string]DependencyType),
 		dg:                      d,
 	}
 	d.connectionsToNode[id] = map[string]struct{}{}
@@ -269,6 +271,7 @@ type node[NodeType any] struct {
 	ready                   bool
 	status                  ResolutionStatus
 	outstandingDependencies map[string]DependencyType
+	resolvedDependencies    map[string]DependencyType
 	dg                      *directedGraph[NodeType]
 }
 
@@ -284,6 +287,12 @@ func (n *node[NodeType]) OutstandingDependencies() map[string]DependencyType {
 	n.dg.lock.Lock()
 	defer n.dg.lock.Unlock()
 	return maps.Clone(n.outstandingDependencies)
+}
+
+func (n *node[NodeType]) ResolvedDependencies() map[string]DependencyType {
+	n.dg.lock.Lock()
+	defer n.dg.lock.Unlock()
+	return maps.Clone(n.resolvedDependencies)
 }
 
 // ResolveNode is the externally accessible way to resolve the node.
@@ -437,6 +446,9 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 		} else {
 			panic(ErrConnectionDoesNotExist{dependencyNodeID, n.id})
 		}
+	}
+	if dependencyResolution == Resolved {
+		n.resolvedDependencies[dependencyNodeID] = dependencyType
 	}
 	delete(n.outstandingDependencies, dependencyNodeID)
 	if dependencyType == ObviatedDependency {
