@@ -92,6 +92,11 @@ type Node[NodeType any] interface {
 	// The resolution must happen only one time, or else a ErrNodeResolutionAlreadySet is returned.
 	// This transitions the resolution status from the existing state (typically Waiting) to the given state.
 	ResolveNode(status ResolutionStatus) error
-	// OutstandingDependencies returns a map of the dependency node ID to the DependencyType of the dependency.
+	// OutstandingDependencies returns a map of the dependency node ID to the DependencyType of all dependencies
+	// that have not been resolved yet.
 	OutstandingDependencies() map[string]DependencyType
+	// ResolvedDependencies returns a map of the dependency node ID to the DependencyType of all dependencies that
+	// have been marked resolvable. The first OR resolved, if present, will retain its OR dependency type, but all
+	// following OR resolutions will be marked as Obviated.
+	ResolvedDependencies() map[string]DependencyType
 }

@@ -761,6 +761,36 @@ func TestDirectedGraph_PushStartingNodes(t *testing.T) {
 	assert.MapContainsKey(t, onlyObviatedDependencies.ID(), readyNodes)
 }
 
+func TestDirectedGraph_TestGetResolvedUnresolvedDependencies(t *testing.T) {
+	d := dgraph.New[string]()
+	rootNode, err := d.AddNode("root", "root")
+	assert.NoError(t, err)
+	or1, err := d.AddNode("or_1", "Or 1")
+	assert.NoError(t, err)
+	or2, err := d.AddNode("or_2", "Or 2")
+	assert.NoError(t, err)
+	or3, err := d.AddNode("or_3", "Or 3")
+	assert.NoError(t, err)
+	or4, err := d.AddNode("or_4", "Or 4")
+	assert.NoError(t, err)
+	assert.NoError(t, rootNode.ConnectDependency(or1.ID(), dgraph.OrDependency))
+	assert.NoError(t, rootNode.ConnectDependency(or2.ID(), dgraph.OrDependency))
+	assert.NoError(t, rootNode.ConnectDependency(or3.ID(), dgraph.OrDependency))
+	assert.NoError(t, rootNode.ConnectDependency(or4.ID(), dgraph.OrDependency))
+	assert.NoError(t, or1.ResolveNode(dgraph.Unresolvable))
+	assert.NoError(t, or2.ResolveNode(dgraph.Resolved))
+	assert.NoError(t, or3.ResolveNode(dgraph.Resolved))
+	resolvedDependencies := rootNode.ResolvedDependencies()
+	assert.Equals(t, resolvedDependencies, map[string]dgraph.DependencyType{
+		or2.ID(): dgraph.OrDependency,       // Or because it was the first Or resolved
+		or3.ID(): dgraph.ObviatedDependency, // Obviated since it was the second OR to be resolved
+	})
+	outstandingDependencies := rootNode.OutstandingDependencies()
+	assert.Equals(t, outstandingDependencies, map[string]dgraph.DependencyType{
+		or4.ID(): dgraph.ObviatedDependency, // Since it was never resolved
+	})
+}
+
 // TestDirectedGraph_Mermaid builds the dependency graph from the basic example
 // in the Arcaflow workflows repo
 // https://github.com/arcalot/arcaflow-workflows/blob/main/basic-examples/basic/README.md
