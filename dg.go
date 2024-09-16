@@ -234,13 +234,17 @@ func (d *directedGraph[NodeType]) PushStartingNodes() error {
 nextNode:
 	for nodeID, n := range d.nodes {
 		for _, dependency := range n.outstandingDependencies {
-			if dependency != ObviatedDependency {
+			if isHardDependency(dependency) {
 				continue nextNode
 			}
 		}
 		d.readyForProcessing[nodeID] = n
 	}
 	return nil
+}
+
+func isHardDependency(dependencyType DependencyType) bool {
+	return dependencyType != ObviatedDependency && dependencyType != OptionalDependency
 }
 
 func (d *directedGraph[NodeType]) HasReadyNodes() bool {
@@ -451,7 +455,7 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 		n.resolvedDependencies[dependencyNodeID] = dependencyType
 	}
 	delete(n.outstandingDependencies, dependencyNodeID)
-	if dependencyType == ObviatedDependency {
+	if !isHardDependency(dependencyType) {
 		return nil // Nothing to do.
 	}
 	// If the dependency is unresolvable, mark self as unresolvable if current type is AND,
@@ -461,14 +465,13 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 		// Check for the unresolvable case.
 		if dependencyType == AndDependency || !n.hasOutstandingDependency(OrDependency) {
 			// Missing requirement. Mark as unresolvable, which propagates to outbound connections.
-			n.ready = true
-			n.dg.readyForProcessing[n.id] = n
+			n.markReady()
 			return n.resolveNode(Unresolvable)
 		}
 	} else {
 		var hasOrDependency bool
 		if dependencyType == OrDependency {
-			n.markOrsObviated()
+			n.markObviated(OrDependency)
 			hasOrDependency = false // This resolved all outstanding ORs.
 		} else {
 			hasOrDependency = n.hasOutstandingDependency(OrDependency)
@@ -477,17 +480,23 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 		// Now determine if it's ready to be finalized (no more deferred dependencies).
 		if !(hasAndDependency || hasOrDependency) {
 			// Mark as ready for processing internally and in the DAG.
-			n.ready = true
-			n.dg.readyForProcessing[n.id] = n
+			n.markReady()
 		}
 	}
 	return nil
 }
 
+func (n *node[NodeType]) markReady() {
+	// Once a node is ready, all outstanding optional dependencies are marked as obviated.
+	n.markObviated(OptionalDependency)
+	n.ready = true
+	n.dg.readyForProcessing[n.id] = n
+}
+
 // Caller should have appropriate mutex locked before calling.
-func (n *node[NodeType]) markOrsObviated() {
+func (n *node[NodeType]) markObviated(typeToMark DependencyType) {
 	for dependency, dependencyType := range n.outstandingDependencies {
-		if dependencyType == OrDependency {
+		if dependencyType == typeToMark {
 			n.outstandingDependencies[dependency] = ObviatedDependency
 		}
 	}
