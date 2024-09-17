@@ -118,6 +118,33 @@ func TestDirectedGraph_Clone(t *testing.T) {
 	assert.Equals(t, len(n3Out), 1)
 }
 
+func TestDirectedGraph_CloneWithReadyCheck(t *testing.T) {
+	d1 := dgraph.New[string]()
+	d1n1, err := d1.AddNode("node-1", "test1")
+	assert.NoError(t, err)
+
+	d1n2, err := d1.AddNode("node-2", "test2")
+	assert.NoError(t, err)
+
+	assert.NoError(t, d1n1.ConnectDependency(d1n2.ID(), dgraph.AndDependency))
+	assert.NoError(t, d1.PushStartingNodes())
+	d1.PopReadyNodes()
+	assert.Equals(t, d1.HasReadyNodes(), false)
+
+	d2 := d1.Clone()
+	assert.NoError(t, d2.PushStartingNodes())
+	d2.PopReadyNodes()
+	assert.Equals(t, d2.HasReadyNodes(), false)
+
+	d2n2, err := d2.GetNodeByID("node-2")
+	assert.NoError(t, err)
+	assert.NoError(t, d2n2.ResolveNode(dgraph.Resolved))
+
+	// Ensure that the nodes in d2 do not reference d1.
+	assert.Equals(t, d1.HasReadyNodes(), false)
+	assert.Equals(t, d2.HasReadyNodes(), true)
+}
+
 func TestDirectedGraph_HasCycles(t *testing.T) {
 	d := dgraph.New[string]()
 	n1, err := d.AddNode("node-1", "test1")
@@ -696,6 +723,162 @@ func TestDirectedGraph_UnresolvableOrsWithAnds(t *testing.T) {
 	assert.Equals(t, len(readyNodes), 1)
 	assert.MapContainsKey(t, dependentNode.ID(), readyNodes)
 	assert.Equals(t, readyNodes[dependentNode.ID()], dgraph.Unresolvable)
+}
+
+func getSimpleOptionalDependencyDag(t *testing.T) dgraph.DirectedGraph[string] {
+	sourceDag := dgraph.New[string]()
+	dependentNode, err := sourceDag.AddNode("dependent-node", "dependent Node")
+	assert.NoError(t, err)
+	dependencyNodeAnd1, err := sourceDag.AddNode("dependency-and", "Dependency AND")
+	assert.NoError(t, err)
+	optionalDependency1, err := sourceDag.AddNode("dependency-optional-1", "Optional 1")
+	assert.NoError(t, err)
+	optionalDependency2, err := sourceDag.AddNode("dependency-optional-2", "Optional 2")
+	assert.NoError(t, err)
+
+	assert.NoError(t, dependentNode.ConnectDependency(dependencyNodeAnd1.ID(), dgraph.AndDependency))
+	assert.NoError(t, dependentNode.ConnectDependency(optionalDependency1.ID(), dgraph.OptionalDependency))
+	assert.NoError(t, dependentNode.ConnectDependency(optionalDependency2.ID(), dgraph.OptionalDependency))
+	return sourceDag
+}
+
+func TestDirectedGraph_SimpleAndWithOptionalDependency(t *testing.T) {
+	// Test with the optional dependency never being resolved
+	d := getSimpleOptionalDependencyDag(t)
+	assert.NoError(t, d.PushStartingNodes())
+	readyNodes := d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 3)
+
+	and1, err := d.GetNodeByID("dependency-and")
+	assert.NoError(t, err)
+	assert.NoError(t, and1.ResolveNode(dgraph.Resolved))
+
+	readyNodes = d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 1)
+	assert.MapContainsKey(t, "dependent-node", readyNodes)
+	dependentNode, err := d.GetNodeByID("dependent-node")
+	assert.NoError(t, err)
+	resolvedDependencies := dependentNode.ResolvedDependencies()
+	assert.Equals(t, resolvedDependencies, map[string]dgraph.DependencyType{
+		"dependency-and": dgraph.AndDependency,
+	})
+	outstandingDependencies := dependentNode.OutstandingDependencies()
+	assert.Equals(t, outstandingDependencies, map[string]dgraph.DependencyType{
+		"dependency-optional-1": dgraph.ObviatedDependency,
+		"dependency-optional-2": dgraph.ObviatedDependency,
+	})
+}
+
+func TestDirectedGraph_OptionalNodeResolved(t *testing.T) {
+	// Test with one optional dependency being resolved before the AND node. Check that the second one
+	// was marked obviated.
+	d := getSimpleOptionalDependencyDag(t)
+	assert.NoError(t, d.PushStartingNodes())
+	readyNodes := d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 3)
+
+	optional1, err := d.GetNodeByID("dependency-optional-1")
+	assert.NoError(t, err)
+	assert.NoError(t, optional1.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, d.HasReadyNodes(), false)
+
+	and1, err := d.GetNodeByID("dependency-and")
+	assert.NoError(t, err)
+	assert.NoError(t, and1.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, d.HasReadyNodes(), true)
+
+	optional2, err := d.GetNodeByID("dependency-optional-2")
+	assert.NoError(t, err)
+	assert.NoError(t, optional2.ResolveNode(dgraph.Resolved))
+
+	readyNodes = d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 1)
+	assert.MapContainsKey(t, "dependent-node", readyNodes)
+
+	dependentNode, err := d.GetNodeByID("dependent-node")
+	assert.NoError(t, err)
+	resolvedDependencies := dependentNode.ResolvedDependencies()
+	assert.Equals(t, resolvedDependencies, map[string]dgraph.DependencyType{
+		"dependency-and":        dgraph.AndDependency,
+		"dependency-optional-1": dgraph.OptionalDependency,
+		"dependency-optional-2": dgraph.ObviatedDependency,
+	})
+	assert.Equals(t, len(dependentNode.OutstandingDependencies()), 0)
+}
+
+func TestDirectedGraph_AllOptionalDependenciesResolved(t *testing.T) {
+	// Test with both optional dependencies being resolved before the AND node. Ensure they have no
+	// effect on the ready status.
+	d := getSimpleOptionalDependencyDag(t)
+	assert.NoError(t, d.PushStartingNodes())
+	readyNodes := d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 3)
+
+	optional1, err := d.GetNodeByID("dependency-optional-1")
+	assert.NoError(t, err)
+	assert.NoError(t, optional1.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, d.HasReadyNodes(), false)
+
+	optional2, err := d.GetNodeByID("dependency-optional-2")
+	assert.NoError(t, err)
+	assert.NoError(t, optional2.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, d.HasReadyNodes(), false)
+
+	and1, err := d.GetNodeByID("dependency-and")
+	assert.NoError(t, err)
+	assert.NoError(t, and1.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, d.HasReadyNodes(), true)
+
+	readyNodes = d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 1)
+	assert.MapContainsKey(t, "dependent-node", readyNodes)
+
+	dependentNode, err := d.GetNodeByID("dependent-node")
+	assert.NoError(t, err)
+	resolvedDependencies := dependentNode.ResolvedDependencies()
+	assert.Equals(t, resolvedDependencies, map[string]dgraph.DependencyType{
+		"dependency-and":        dgraph.AndDependency,
+		"dependency-optional-1": dgraph.OptionalDependency,
+		"dependency-optional-2": dgraph.OptionalDependency,
+	})
+	assert.Equals(t, len(dependentNode.OutstandingDependencies()), 0)
+}
+
+func TestDirectedGraph_WithUnresolvableOptionalDependency(t *testing.T) {
+	// Test with an optional dependency being marked as unresolvable
+	// It should have no effect on the ready states.
+	d := getSimpleOptionalDependencyDag(t)
+	assert.NoError(t, d.PushStartingNodes())
+	readyNodes := d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 3)
+
+	optional1, err := d.GetNodeByID("dependency-optional-1")
+	assert.NoError(t, err)
+	assert.NoError(t, optional1.ResolveNode(dgraph.Unresolvable))
+	assert.Equals(t, d.HasReadyNodes(), false)
+
+	optional2, err := d.GetNodeByID("dependency-optional-2")
+	assert.NoError(t, err)
+	assert.NoError(t, optional2.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, d.HasReadyNodes(), false)
+
+	and1, err := d.GetNodeByID("dependency-and")
+	assert.NoError(t, err)
+	assert.NoError(t, and1.ResolveNode(dgraph.Resolved))
+	assert.Equals(t, d.HasReadyNodes(), true)
+
+	readyNodes = d.PopReadyNodes()
+	assert.Equals(t, len(readyNodes), 1)
+	assert.MapContainsKey(t, "dependent-node", readyNodes)
+
+	dependentNode, err := d.GetNodeByID("dependent-node")
+	assert.NoError(t, err)
+	resolvedDependencies := dependentNode.ResolvedDependencies()
+	assert.Equals(t, resolvedDependencies, map[string]dgraph.DependencyType{
+		"dependency-and":        dgraph.AndDependency,
+		"dependency-optional-2": dgraph.OptionalDependency,
+	})
+	assert.Equals(t, len(dependentNode.OutstandingDependencies()), 0)
 }
 
 func TestDirectedGraph_TestResolvingDeletedNode(t *testing.T) {

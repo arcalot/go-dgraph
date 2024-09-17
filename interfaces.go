@@ -10,6 +10,9 @@ const (
 	AndDependency DependencyType = "and"
 	// CompletionAndDependency means the dependency will resolve due to either resolution or failure.
 	CompletionAndDependency DependencyType = "completion-and"
+	// OptionalDependency means the resolution of the dependency is tracked, but it has no effect
+	// on the ready or failure state of a node.
+	OptionalDependency DependencyType = "optional"
 	// ObviatedDependency is for dependencies that no longer have an effect due to a prior resolution.
 	// For example, if one OR is resolved, all other OR dependencies are changed to ObviatedDependency.
 	ObviatedDependency DependencyType = "obviated"
