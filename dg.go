@@ -486,8 +486,9 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 	return nil
 }
 
+// Marks a node as ready, and marks all outstanding optional dependencies as obviated.
+// Caller should have appropriate mutex locked before calling.
 func (n *node[NodeType]) markReady() {
-	// Once a node is ready, all outstanding optional dependencies are marked as obviated.
 	n.markObviated(OptionalDependency)
 	n.ready = true
 	n.dg.readyForProcessing[n.id] = n
