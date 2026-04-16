@@ -478,7 +478,7 @@ func (n *node[NodeType]) dependencyResolved(dependencyNodeID string, dependencyR
 		}
 		hasAndDependency := n.hasOutstandingDependency(AndDependency) || n.hasOutstandingDependency(CompletionAndDependency)
 		// Now determine if it's ready to be finalized (no more deferred dependencies).
-		if !(hasAndDependency || hasOrDependency) {
+		if !hasAndDependency && !hasOrDependency {
 			// Mark as ready for processing internally and in the DAG.
 			n.markReady()
 		}
